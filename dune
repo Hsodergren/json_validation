@@ -1,0 +1,15 @@
+(executable
+ (name test)
+ (libraries yojson jsch react brr ppx_deriving note)
+ (modes js)
+ (link_flags (:standard -no-check-prims))
+ (preprocess (pps js_of_ocaml-ppx ppx_deriving.eq ppx_deriving.show)))
+
+(rule
+ (targets test.js)
+ (deps test.bc.js)
+ (action (run cp %{deps} %{targets})))
+
+(alias
+ (name app)
+ (deps test.js index.html))
