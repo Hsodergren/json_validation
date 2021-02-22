@@ -4,17 +4,36 @@
   <script type="text/javascript" defer="defer" src="test.js"></script>
   <title>editor</title>
   <style>
-    ul.list > li > .object {
+    body {
+        background-color:#e8ffff;
+    }
+    ul.list li .object {
+        margin-left: 0px;
+        margin-top: 5px
+    }
+    /* li { */
+    /*     margin-top:0px */
+    /* } */
+    #main > .object {
+        margin-left: 0px
+    }
+    .validator > .object {
         margin-left: 0px
     }
     .object {
         margin-left: 20px
     }
-    #main > .object {
-        margin-left: 0px
-    }
     input {
-        width: 10em
+        background-color: transparent;
+        width: 10em;
+        margin:1px;
+        border-top:none;
+        border-left:none;
+        border-right:none;
+        border-bottom: solid #00000033 1px;
+    }
+    h4 {
+        margin-bottom: 1px
     }
     .valid {
     }
@@ -31,7 +50,23 @@
         color: #ff8
     }
     div.validator {
-        float:left
+        float:left;
+        padding-left:5px;
+        padding-right:10px;
+        padding-bottom:20px;
+        border-right:solid black 1px;
+    }
+    div.result {
+        float:right;
+        padding-left:5px;
+        padding-right:10px;
+    }
+
+    .object[vis=visible] {
+        display:default
+    }
+    .object[vis=hide] {
+        display:none
     }
   </style>
 </head>

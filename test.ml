@@ -53,6 +53,14 @@ let json2 = {|
 let json2 = Yojson.Safe.from_string json2
 let (<+>) = Jsonpath.add
 
+let set_children signal f el =
+  S.trace (fun v ->
+      El.set_children el (f v)
+    ) signal
+  |> ignore
+
+let trd (_,_,x) = x
+
 module Model : sig
   type t [@@deriving show]
   type v = private
@@ -66,6 +74,7 @@ module Model : sig
   val equal: t -> t -> bool
 
   (* val get: Jsonpath.t -> t -> t option *)
+  val to_yojson: t -> Yojson.Safe.t
   val make: Schema.t -> Yojson.Safe.t -> t
   val update: t -> Jsonpath.t -> string -> t
   val add_field: Jsonpath.t -> t -> t
@@ -94,6 +103,7 @@ end = struct
       | _,`Bool b -> Simple (string_of_bool b)
       | (Number _ | Integer _ | String _ | Boolean),`Null -> Simple ""
       | Array {items;_}, `List l -> Array (List.map (make_v items) l)
+      | Array _, `Null -> Array []
       | Object {properties=Props props;_}, (`Assoc _ | `Null as json) ->
         let objs = (List.map (fun (name,sch) ->
             let json = (try Yojson.Safe.Util.member name json with _ -> `Null) in
@@ -115,15 +125,46 @@ end = struct
     in
     {schema; v=make_v schema json}
 
-  (* let get path t =
-   *   let rec aux ps t =
-   *     match ps,t with
-   *     | [],_ -> t
-   *     | `Object s::tl, Object (ts) -> aux tl (List.assoc s ts)
-   *     | `Index i::tl, Array (ts) -> aux tl (List.nth ts i)
-   *     | _ -> Console.log ["error"];failwith "error"
-   *   in
-   *   Some (aux (Jsonpath.to_list path) t) *)
+  let to_yojson {schema;v} =
+    let rec aux {Schema.value;_} v =
+      match value,v with
+      | (Number _ | Integer _ | String _ | Boolean), Simple "" -> `Null
+      | Number _, Simple s -> `Float (float_of_string s)
+      | Integer _, Simple s -> `Int (int_of_string s)
+      | String _, Simple s -> `String s
+      | Boolean, Simple s -> `Bool (bool_of_string s)
+      | Array {items;_}, Array ts -> begin
+        let l =
+          (List.map (aux items) ts
+           |> List.filter (function |`Null -> false | _ -> true))
+        in
+        match l with
+        | [] -> `Null
+        | _ -> `List l
+      end
+      | Object {properties=Props props;_}, Object ts -> begin
+        let l =
+          List.map (fun (s,t) -> s,aux (List.assoc s props) t) ts
+          |> List.filter (function | (_,`Null) -> false | _ -> true)
+        in
+        match l with
+        | [] -> `Null
+        | l -> `Assoc l
+      end
+      | Object {properties=PatProps props;_}, Object ts -> begin
+        let l = List.map (fun (s,t) ->
+            let (_,_,schema) = List.find (fun (re,_,_) -> Re.execp re s) props in
+            s, aux schema t
+          ) ts
+                |> List.filter (function | (_,`Null) -> false | _ -> true)
+        in
+        match l with
+        | [] -> `Null
+        | l -> `Assoc l
+      end
+      | _ -> failwith "not implemented"
+    in
+    aux schema v
 
   let rec assoc_update f k l =
     match l with
@@ -204,21 +245,21 @@ let validate : Schema.t -> string -> Jsonpath.t -> validation =
     | String _ -> v string
     | _ -> Console.log [Jstr.v "cannot validate arrays or objects"]; failwith "error"
 
-let simple_input : Schema.t -> Jsonpath.t -> string -> string event * validation signal * El.t
-  = fun schema path value ->
-    let el = El.input ~at:[At.value (Jstr.v value)] () in
-    let e, send_e = S.create (validate schema value path) in
-    let update, send_update = E.create () in
-    let target = El.as_target el in
-    Ev.listen Ev.keyup (fun _ ->
-        let cur_str = El.prop El.Prop.value el in
-        send_e (validate schema (Jstr.to_string cur_str) path);
-      ) target;
-    Ev.listen Ev.change (fun _ ->
-        let cur_str = El.prop El.Prop.value el in
-        send_update (Jstr.to_string cur_str)
-      ) target;
-    update, e, el
+let simple_input ?(disabled=false) schema path value =
+  let at = [At.value (Jstr.v value)] in
+  let el = El.input ~at:(if disabled then At.disabled::at else at) () in
+  let e, send_e = S.create (validate schema value path) in
+  let update, send_update = E.create () in
+  let target = El.as_target el in
+  Ev.listen Ev.keyup (fun _ ->
+      let cur_str = El.prop El.Prop.value el in
+      send_e (validate schema (Jstr.to_string cur_str) path);
+    ) target;
+  Ev.listen Ev.keyup (fun _ ->
+      let cur_str = El.prop El.Prop.value el in
+      send_update (Jstr.to_string cur_str)
+    ) target;
+  update, e, el
 
 let errors_to_str errs =
   List.map (fun (p,s) -> Printf.sprintf "%s : %s\n" (Jsonpath.to_string p) s) errs
@@ -239,14 +280,21 @@ let merge_valid v1 v2 =
   | `Invalid a, `Invalid b  -> `Invalid (a @ b)
   | `Invalid l,_ | _,`Invalid l-> `Invalid l
 
-let create_ui model_s : validation signal * action event * El.t list =
-  let set_class valid el =
-    El.set_at (Jstr.v "class") (Some (Jstr.v @@ valid_to_class valid)) el
+let create_ui
+    ?(disabled=false)
+    ?(handle_required=true)
+    model : validation signal * action event * El.t list =
+  let set_attr signal to_str attr el =
+    S.trace (fun v ->
+      El.set_at (Jstr.v attr) (Some (Jstr.v @@ to_str v)) el
+      ) signal
+    |> ignore
   in
+  let set_class signal to_str el = set_attr signal to_str "class" el in
   let rec aux model ({Schema.value;_} as schema) path =
     match model, value with
     | Model.Simple s, (Number _ | Integer _ | String _ | Boolean) ->
-      let updated,s,el = simple_input schema path s in
+      let updated,s,el = simple_input ~disabled schema path s in
       s, E.map (fun s -> `Update (path,s)) updated , [el]
     | Array ts, Array {items;_} ->
       let validss,ac_evs, els =
@@ -255,7 +303,7 @@ let create_ui model_s : validation signal * action event * El.t list =
       in
       let lis = List.map El.li els in
       let at = [At.class' (Jstr.v "list")] in
-      S.merge merge_valid `Valid validss, E.select (ac_evs), [El.ul ~at lis]
+      S.merge merge_valid `Empty validss, E.select (ac_evs), [El.ul ~at lis]
     | Object ts, Object ({required;properties}) ->
       let get_schema props str =
         match props with
@@ -273,11 +321,16 @@ let create_ui model_s : validation signal * action event * El.t list =
               then S.map (function | `Empty -> `Invalid [path, "required missing"] | a -> a) v
               else v
             in
-            let v = Option.fold required ~none:v ~some:err_if_req in
+            let v =
+              if handle_required
+              then Option.fold required ~none:v ~some:err_if_req
+              else v
+            in
             let hdr = El.h4 [El.txt' s] in
-            ignore @@ S.trace (fun v -> set_class v hdr) v;
             let at = [At.class' (Jstr.v "object")] in
-            v,b,El.div ~at [hdr; El.div e]
+            let el = El.div ~at [hdr; El.div e] in
+            let () = set_class v valid_to_class hdr in
+            v,b, el
           ) ts
         |> unzip3
       in
@@ -285,17 +338,47 @@ let create_ui model_s : validation signal * action event * El.t list =
       valids,E.select ac_evs,els
     | _ -> Console.log ["invalid"]; failwith "invalid"
   in
-  let model = S.value model_s in
   aux (Model.v model) (Model.schema model) Jsonpath.empty
 
-let main model =
+let create_result models_s =
+  match models_s with
+  | [] -> El.div []
+  | hd::_ ->
+    let schema = Model.schema (S.value hd) in
+    let jsons = List.map (S.map Model.to_yojson) models_s in
+    let s = S.merge (Jsch.Merge.merge) (`Assoc []) jsons in
+    let parent = El.div [] in
+    set_children s (fun json ->
+        Console.log [Jstr.v @@ Yojson.Safe.to_string json];
+        Model.make schema json
+        |> create_ui ~disabled:true
+        |> trd
+      ) parent;
+    parent
+
+let validator ?(disabled=false) ?(handle_required=true) model =
   let def model_s =
-    let v,a,el = create_ui model_s in
+    let v,a,el = create_ui ~disabled ~handle_required (S.value model_s) in
     let apply_action = E.map apply_action a in
     let model_s' = S.accum ~eq:Model.equal apply_action (S.value model_s) in
     model_s',(model_s',v,el)
   in
   S.fix ~eq:Model.equal model def
+
+let main_ui schema jsons =
+  let models,_vs,uis =
+    List.mapi (fun i j -> Model.make schema j,i=0) jsons
+    |> List.map (fun (m,b) -> validator ~handle_required:b m)
+    |> unzip3
+  in
+  let result_ui = create_result models in
+  let validators = List.map (fun el ->
+      El.div ~at:[At.class' (Jstr.v "validator")] el
+    ) uis
+  in
+  let result_ui = El.div ~at:[At.class' (Jstr.v "result")] [result_ui] in
+  result_ui::validators
+
 
 let main () =
   let id = Jstr.v "main" in
@@ -303,19 +386,7 @@ let main () =
   | None -> Console.(error ["no element with name main"])
   | Some el ->
     let jsons = [json;json2;json2] in
-    let models = List.map (Model.make schema) jsons in
-    let _ms,vs,uis = List.map main models |> unzip3 in
-    let at = [At.class' (Jstr.v "validator")] in
-    let s = S.merge merge_valid `Valid vs in
-    ignore @@ S.trace (fun s ->
-        let strs = match s with
-          | `Empty -> ["empty"]
-          | `Valid -> ["valid"]
-          | `Invalid errs -> List.map (fun (p,s) -> Printf.sprintf "%s : %s" (Jsonpath.to_string p) s) errs
-          | `Parsing -> ["pasing error"]
-        in
-        Console.log [Array.of_list @@ List.map Jstr.v strs]) s;
-    let ui = List.map (fun u -> El.div ~at u) uis in
-    El.set_children el [El.div ui]
+    let ui = main_ui schema jsons in
+    El.set_children el ui
 
 let () = main ()
