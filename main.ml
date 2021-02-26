@@ -67,6 +67,7 @@ let apply_action action model =
   match action with
   | `Update (p,str) -> Model.update model p str
   | `AddField p -> Model.add_field p model
+  | `RemField p -> Model.rem_field p model
 
 let errors_to_str errs =
   List.map (fun (p,s) -> Printf.sprintf "%s : %s\n" (Jsonpath.to_string p) s) errs

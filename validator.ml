@@ -39,7 +39,9 @@ let kind = function
 
 type t = { schema : Schema.t; v : v}
 
-type action = [`Update of Jsonpath.t * string | `AddField of Jsonpath.t]
+type action = [ `Update of Jsonpath.t * string
+              | `AddField of Jsonpath.t
+              | `RemField of Jsonpath.t ]
 
 let schema {schema;_} = schema
 let v {v;_} = v
@@ -57,9 +59,8 @@ let make schema json =
     | _,`String s -> Simple s
     | _,`Bool b -> Simple (string_of_bool b)
     | (Number _ | Integer _ | String _ | Boolean),`Null -> Simple ""
-    | _, `Null -> Empty
     | Array {items;_}, `List l -> Array (List.map (make_v items) l)
-    | Object {properties=Props props;_}, (`Assoc _ as json) ->
+    | Object {properties=Props props;_}, (`Assoc _ | `Null as json) ->
       let objs = (List.map (fun (name,sch) ->
           let json = (try Yojson.Safe.Util.member name json with _ -> `Null) in
           name, make_v sch json
@@ -76,6 +77,7 @@ let make schema json =
           ) js
       in
       Object objs
+    | _, `Null -> Empty
     (* | Object {properties=PatProps _;_}, `Null -> make_v schema (`Assoc []) *)
     | _ -> failwith "unhandled json"
   in
@@ -153,9 +155,29 @@ let rec nth_update f i l =
   | hd::tl when i = 0 -> f hd::tl
   | hd::tl -> hd::nth_update f (i-1) tl
 
+let rec remove_item i = function
+  | [] -> []
+  | _::tl when i = 0 -> tl
+  | hd::tl -> hd::remove_item (i-1) tl
+
+let rem_field p ({v;schema} as t) =
+  let rec aux p {Schema.value;_} t  =
+    match p,t,value with
+    | [],Simple _,_ -> t
+    | [`Index i], Array (ts),_ -> Array (remove_item i ts)
+    | `Index i::tl,Array (ts),Array {items;_} -> Array(nth_update (aux tl items) i ts)
+    | [`Object s],Object (ts), _ -> Object (List.remove_assoc s ts)
+    | `Object s::tl,Object (ts),Object {properties=Props props;_} ->
+      let schema = List.assoc s props in
+      Object (assoc_update (aux tl schema) s ts)
+    | _ -> failwith "invalid path"
+  in
+  let t = {t with v=aux (Jsonpath.to_list p) schema v} in
+  t
+
 let add_field p ({v;schema} as t) =
-  Console.log ["add_field"];
-  Console.log ["before"; Jstr.v @@ show t];
+  (* Console.log ["add_field"];
+   * Console.log ["before"; Jstr.v @@ show t]; *)
   let rec aux p {Schema.value;_} t  =
     match p,t,value with
     | [],Simple _,_ -> t
@@ -169,7 +191,7 @@ let add_field p ({v;schema} as t) =
     | _ -> failwith "invalid path"
   in
   let t = {t with v=aux (Jsonpath.to_list p) schema v} in
-  Console.log ["after"; Jstr.v @@ show t];
+  (* Console.log ["after"; Jstr.v @@ show t]; *)
   t
 
 let update ({v;_} as t) path str =
@@ -205,8 +227,8 @@ let validate : Schema.t -> string -> Jsonpath.t -> Validation.t =
     | String _ -> v string
     | _ -> Console.log [Jstr.v "cannot validate arrays or objects"]; failwith "error"
 
-let add_button () =
-  let el = El.button [El.txt' "+"] in
+let add_button txt =
+  let el = El.button [El.txt' txt] in
   let e,send_e = E.create () in
   Ev.listen Ev.click (fun _ -> send_e ()) (El.as_target el);
   e,el
@@ -239,26 +261,32 @@ let view ?(disabled=false) ?(handle_required=true) ?(id="") model_s =
   let list_eq_len l1 l2 = List.length l1 = List.length l2 in
   let rec aux model ({Schema.value;_} as schema) path =
     match model, value with
-    | Empty, _ -> S.const `Valid, E.never, [El.div []]
+    | Empty, _ -> S.const `Valid, E.never, []
     | Simple s, (Number _ | Integer _ | String _ | Boolean) ->
       let updated,s,el = simple_input ~disabled schema path s in
       s, E.map (fun s -> `Update (path,s)) updated , [el]
     | Array _ts, Array {items;_} ->
       let (>>=) = S.bind in
-      let but_e,but_el = add_button () in
-      let but_e = E.map (fun () -> `AddField path) but_e in
+      let but_e,but_el = add_button "+" in
+      let add_e = E.map (fun () -> `AddField path) but_e in
       let ee,send_e = E.create () in
-      let e = E.switch but_e ee in
+      let e = E.switch add_e ee in
       let at = [At.class' (Jstr.v "list")] in
       let parent = El.ul ~at [] in
       let s =
         S.map ~eq:list_eq_len
           (fun m -> let a = get_arr path m in a) model_s >>= fun (vs) ->
         let validss,ac_evs, els =
-          List.mapi (fun i t -> aux t items (path <+> `Index i)) vs
+          List.mapi (fun i t ->
+              let path = path <+> `Index i in
+              let a,b,el = aux t items path in
+              let but_e,but_el = add_button "-" in
+              let add_e = E.map (fun () -> `RemField path) but_e in
+              a,E.select[add_e;b],if disabled then el else but_el::el
+            ) vs
           |> Util.unzip3
         in
-        send_e (E.select (but_e::ac_evs));
+        send_e (E.select (add_e::ac_evs));
         let el = List.map El.li els in
         El.set_children parent (if disabled then el else but_el::el);
         S.merge Validation.merge `Empty validss
