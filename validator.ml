@@ -160,7 +160,6 @@ let rec remove_item i = function
   | hd::tl -> hd::remove_item (i-1) tl
 
 let rem_field p ({v;schema} as t) =
-  Console.log [Jstr.v @@ Jsonpath.to_string p];
   let rec aux p {Schema.value;_} t  =
     match p,t,value with
     | [],Simple _,_ -> t
@@ -176,8 +175,6 @@ let rem_field p ({v;schema} as t) =
   t
 
 let add_item p ({v;schema} as t) =
-  Console.log ["add_item"; Jsonpath.to_string p];
-  Console.log ["before"; Jstr.v @@ show t];
   let rec aux p {Schema.value;_} t  =
     match p,t,value with
     | `Index i::tl,Array (ts),Array {items;_} -> Array(nth_update (aux tl items) i ts)
@@ -196,12 +193,9 @@ let add_item p ({v;schema} as t) =
     | _ -> failwith "invalid path"
   in
   let t = {t with v=aux (Jsonpath.to_list p) schema v} in
-  Console.log ["after"; Jstr.v @@ show t];
   t
 
 let add_field p str ({v;schema} as t) =
-  Console.log ["add_field"; Jsonpath.to_string p];
-  Console.log ["before"; Jstr.v @@ show t];
   let rec aux p {Schema.value;_} t  =
     match p,t,value with
     | `Index i::tl,Array (ts),Array {items;_} -> Array(nth_update (aux tl items) i ts)
@@ -219,7 +213,6 @@ let add_field p str ({v;schema} as t) =
     | _ -> failwith "invalid path"
   in
   let t = {t with v=aux (Jsonpath.to_list p) schema v} in
-  Console.log ["after"; Jstr.v @@ show t];
   t
 
 let update ({v;_} as t) path str =
