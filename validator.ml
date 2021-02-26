@@ -256,15 +256,22 @@ let add_button el v =
 
 let regex_input regexes =
   let but = El.button [El.txt' "add"] in
-  let input = El.input () in
+  let input = El.input ~at:[At.class' (Jstr.v "reg_input")] () in
+  let regex_txt = El.span [] in
   let e,send_e = E.create () in
   let cur,send_cur = S.create "" in
-  let cur = S.trace (fun str ->
+  let cur_a = S.map (fun str ->
       match List.find_opt (fun (re,_,_) -> Re.execp re str) regexes with
-      | Some (_re,_reg_str,_) -> El.set_at (Jstr.v "disabled") None but
-      | None -> El.set_at (Jstr.v "disabled") (Some (Jstr.v "true")) but
+      | Some (_re,_reg_str,_) -> El.set_at (Jstr.v "disabled") None but; Some _reg_str
+      | None -> El.set_at (Jstr.v "disabled") (Some (Jstr.v "true")) but; None
     ) cur
   in
+  ignore @@ S.trace (function
+      | Some regex_str ->
+        El.set_children regex_txt [El.txt' regex_str];
+      | None ->
+        El.set_children regex_txt [];
+    ) cur_a;
   Ev.listen Ev.click (fun _ ->
       send_e (S.value cur);
       send_cur "";
@@ -274,7 +281,7 @@ let regex_input regexes =
       let v = Jstr.to_string @@ El.prop El.Prop.value input in
       send_cur v
     ) (El.as_target input);
-  e,El.div [but;input]
+  e,El.div [but;input;regex_txt]
 
 let simple_input ?(disabled=false) schema path value =
   let at = [At.value (Jstr.v value)] in
