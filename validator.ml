@@ -26,13 +26,11 @@ module Validation = struct
 end
 
 type v =
-  | Empty
   | Simple of string
   | Array of v list
   | Object of (string * v) list [@@deriving show, eq]
 
 let kind = function
-  | Empty -> "empty"
   | Simple _ -> "simple"
   | Array _ -> "array"
   | Object _ -> "object"
@@ -60,7 +58,9 @@ let make schema json =
     | _,`Bool b -> Simple (string_of_bool b)
     | (Number _ | Integer _ | String _ | Boolean),`Null -> Simple ""
     | Array {items;_}, `List l -> Array (List.map (make_v items) l)
-    | Object {properties=Props props;_}, (`Assoc _ | `Null as json) ->
+    | Array _, `Null -> Array []
+    | Object _, `Null -> Object []
+    | Object {properties=Props props;_}, (`Assoc _ as json) ->
       let objs = (List.map (fun (name,sch) ->
           let json = (try Yojson.Safe.Util.member name json with _ -> `Null) in
           name, make_v sch json
@@ -77,7 +77,6 @@ let make schema json =
           ) js
       in
       Object objs
-    | _, `Null -> Empty
     (* | Object {properties=PatProps _;_}, `Null -> make_v schema (`Assoc []) *)
     | _ -> failwith "unhandled json"
   in
@@ -97,7 +96,6 @@ let to_yojson {schema;v} =
   in
   let rec aux {Schema.value;_} v =
     match value,v with
-    | _, Empty -> `Null
     | (Number _ | Integer _ | String _ | Boolean), Simple "" -> `Null
     | Number _, Simple s -> `Float (float_of_string s)
     | Integer _, Simple s -> `Int (int_of_string s)
@@ -161,6 +159,7 @@ let rec remove_item i = function
   | hd::tl -> hd::remove_item (i-1) tl
 
 let rem_field p ({v;schema} as t) =
+  Console.log [Jstr.v @@ Jsonpath.to_string p];
   let rec aux p {Schema.value;_} t  =
     match p,t,value with
     | [],Simple _,_ -> t
@@ -176,11 +175,10 @@ let rem_field p ({v;schema} as t) =
   t
 
 let add_field p ({v;schema} as t) =
-  (* Console.log ["add_field"];
-   * Console.log ["before"; Jstr.v @@ show t]; *)
+  Console.log ["add_field"; Jsonpath.to_string p];
+  Console.log ["before"; Jstr.v @@ show t];
   let rec aux p {Schema.value;_} t  =
     match p,t,value with
-    | [],Simple _,_ -> t
     | `Index i::tl,Array (ts),Array {items;_} -> Array(nth_update (aux tl items) i ts)
     | [], Array (ts),Array {items;_} ->
       let {v;_} = make items `Null in
@@ -191,7 +189,7 @@ let add_field p ({v;schema} as t) =
     | _ -> failwith "invalid path"
   in
   let t = {t with v=aux (Jsonpath.to_list p) schema v} in
-  (* Console.log ["after"; Jstr.v @@ show t]; *)
+  Console.log ["after"; Jstr.v @@ show t];
   t
 
 let update ({v;_} as t) path str =
@@ -227,10 +225,10 @@ let validate : Schema.t -> string -> Jsonpath.t -> Validation.t =
     | String _ -> v string
     | _ -> Console.log [Jstr.v "cannot validate arrays or objects"]; failwith "error"
 
-let add_button txt =
-  let el = El.button [El.txt' txt] in
+let add_button el v =
+  let el = El.button [el] in
   let e,send_e = E.create () in
-  Ev.listen Ev.click (fun _ -> send_e ()) (El.as_target el);
+  Ev.listen Ev.click (fun _ -> send_e v) (El.as_target el);
   e,el
 
 let simple_input ?(disabled=false) schema path value =
@@ -258,6 +256,14 @@ let schema_to_short {Schema.value;_} =
   | Object _ -> "O"
   | Array _ -> "A"
 
+let prev_if_err f start =
+  let last = ref start in
+  fun v ->
+    try
+      last := f v;
+      !last
+    with _ -> !last
+
 let view ?(disabled=false) ?(handle_required=true) ?(id="") model_s =
   let (<+>) = Jsonpath.add in
   let set_attr signal to_str attr el =
@@ -268,29 +274,25 @@ let view ?(disabled=false) ?(handle_required=true) ?(id="") model_s =
   in
   let set_class signal to_str el = set_attr signal to_str "class" el in
   let list_eq_len l1 l2 = List.length l1 = List.length l2 in
+  let (>>=) = S.bind in
   let rec aux model ({Schema.value;_} as schema) path =
     match model, value with
-    | Empty, _ -> S.const `Valid, E.never, []
     | Simple s, (Number _ | Integer _ | String _ | Boolean) ->
       let updated,s,el = simple_input ~disabled schema path s in
       s, E.map (fun s -> `Update (path,s)) updated , [el]
     | Array _ts, Array {items;_} ->
-      let (>>=) = S.bind in
-      let but_e,but_el = add_button "+" in
-      let add_e = E.map (fun () -> `AddField path) but_e in
+      let add_e,but_el = add_button (El.txt' "+") (`AddField path) in
       let ee,send_e = E.create () in
       let e = E.switch add_e ee in
       let at = [At.class' (Jstr.v "list")] in
       let parent = El.ul ~at [] in
-      let s =
-        S.map ~eq:list_eq_len
-          (fun m -> let a = get_arr path m in a) model_s >>= fun (vs) ->
+      let s = S.map ~eq:list_eq_len
+          (prev_if_err (get_arr path) []) model_s >>= fun (vs) ->
         let validss,ac_evs, els =
           List.mapi (fun i t ->
               let path = path <+> `Index i in
               let a,b,el = aux t items path in
-              let but_e,but_el = add_button "-" in
-              let add_e = E.map (fun () -> `RemField path) but_e in
+              let add_e,but_el = add_button (El.txt' "-") (`RemField path) in
               a,E.select[add_e;b],if disabled then el else but_el::el
             ) vs
           |> Util.unzip3
@@ -301,39 +303,49 @@ let view ?(disabled=false) ?(handle_required=true) ?(id="") model_s =
         S.merge Validation.merge `Empty validss
       in
       s, e, [parent]
-    | Object ts, Object ({required;properties}) ->
+    | Object _ts, Object ({required;properties}) ->
       let get_schema props str =
         match props with
         | Schema.Props props -> List.assoc str props
         | PatProps props -> Option.get @@
           List.find_map (fun (re,_,sch) -> if Re.execp re str then Some sch else None) props
       in
-      let validss,ac_evs, els =
-        List.map (fun (s,t) ->
-            let path = path <+> `Object s in
-            let schema = get_schema properties s in
-            let v,b,e = aux t schema path in
-            let err_if_req l =
-              if List.mem s l
-              then S.map (function | `Empty -> `Invalid [path, "required missing"] | a -> a) v
-              else v
-            in
-            let v =
-              if handle_required
-              then Option.fold required ~none:v ~some:err_if_req
-              else v
-            in
-            let s = Printf.sprintf "%s (%s)" s (schema_to_short schema) in
-            let hdr = El.h4 [El.txt' s] in
-            let at = [At.class' (Jstr.v "object")] in
-            let el = El.div ~at [hdr; El.div e] in
-            let () = set_class v Validation.to_class hdr in
-            v,b, el
-          ) ts
-        |> Util.unzip3
+      let is_patprops = function |Schema.Props _ -> false | PatProps _ -> true in
+      let add_e,but_el = add_button (El.txt' "+") (`AddField path) in
+      let ee, _send_e = E.create () in
+      let e = E.switch add_e ee in
+      let at = [At.class' (Jstr.v "object")] in
+      let parent = El.div ~at [] in
+      let s = S.map ~eq:list_eq_len (prev_if_err (get_obj path) []) model_s >>= fun vs ->
+        let validss,_ac_evs, els =
+          List.map (fun (s,t) ->
+              let path = path <+> `Object s in
+              let schema = get_schema properties s in
+              let v,b,e = aux t schema path in
+              let err_if_req l =
+                if List.mem s l
+                then S.map (function | `Empty -> `Invalid [path, "required missing"] | a -> a) v
+                else v
+              in
+              let v =
+                if handle_required
+                then Option.fold required ~none:v ~some:err_if_req
+                else v
+              in
+              let s = Printf.sprintf "%s (%s)" s (schema_to_short schema) in
+              let hdr = El.h4 [El.txt' s] in
+              let el = [hdr; El.div e] in
+              let () = set_class v Validation.to_class hdr in
+              v,b,el
+            ) vs
+          |> Util.unzip3
+        in
+        El.set_children parent
+          (if is_patprops properties then but_el::List.map El.div els else List.map El.div els);
+        _send_e (E.select (add_e::_ac_evs));
+        S.merge Validation.merge `Valid validss
       in
-      let valids = S.merge Validation.merge `Empty validss in
-      valids,E.select ac_evs,els
+      s,e,[parent]
     | a,b ->
       Console.error Jstr.([v id;v @@ Jsonpath.to_string path ^" ::";
                            v @@ kind a; v "and";v @@ Schema.kind b; v "invalid"]);

@@ -3,7 +3,6 @@ open React
 
 type t [@@deriving show]
 type v = private
-  | Empty
   | Simple of string
   | Array of v list
   | Object of (string * v) list [@@deriving show, eq]

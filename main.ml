@@ -17,6 +17,7 @@ let schema = {|
      "required": ["da"]
     },
     "e": { "type": "array", "items": { "type": "object", "properties": { "a" : { "type":"boolean" }, "b" : { "type": "number"}}}},
+    "arrarr": { "type": "array", "items": { "type": "array", "items": { "type": "number"}}},
   "pats": { "type" : "object", "patternProperties" : {"^a.*$" : {"type": "string"}, "^q.*$" : {"type": "integer"}}}
   }
 }
@@ -35,6 +36,7 @@ let json = {|
   "db":"asd"
   },
 "e": [{"a":true, "b":1.2}, {"a": false, "b":5}],
+"arrarr": [[]],
 "pats": {"aaaa":"qwe", "q":1}
 }
 |}
@@ -49,6 +51,7 @@ let json2 = {|
   "db":"asd"
   },
 "e": [{"a":true, "b":1.2}, {"a": false, "b":5}],
+"arrarr": [[],[]],
 "pats": {"aaaa":"qwe", "q":1}
 }
 |}
