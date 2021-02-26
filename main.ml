@@ -69,7 +69,8 @@ let trd (_,_,x) = x
 let apply_action action model =
   match action with
   | `Update (p,str) -> Model.update model p str
-  | `AddField p -> Model.add_field p model
+  | `AddItem p -> Model.add_item p model
+  | `AddField (p,s) -> Model.add_field p s model
   | `RemField p -> Model.rem_field p model
 
 let errors_to_str errs =

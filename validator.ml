@@ -38,7 +38,8 @@ let kind = function
 type t = { schema : Schema.t; v : v}
 
 type action = [ `Update of Jsonpath.t * string
-              | `AddField of Jsonpath.t
+              | `AddItem of Jsonpath.t
+              | `AddField of Jsonpath.t * string
               | `RemField of Jsonpath.t ]
 
 let schema {schema;_} = schema
@@ -48,6 +49,11 @@ let equal {v=v1;_} {v=v2;_} = equal_v v1 v2
 
 let pp fmt {v;_} = pp_v fmt v
 let show {v;_} = show_v v
+
+let find_schema name = function
+  | Schema.Props props -> List.assoc_opt name props
+  | PatProps props ->
+    List.find_map (fun (re,_,s) -> if Re.execp re name then Some s else None) props
 
 let make schema json =
   let rec make_v ({Schema.value;_}) json =
@@ -59,25 +65,20 @@ let make schema json =
     | (Number _ | Integer _ | String _ | Boolean),`Null -> Simple ""
     | Array {items;_}, `List l -> Array (List.map (make_v items) l)
     | Array _, `Null -> Array []
-    | Object _, `Null -> Object []
-    | Object {properties=Props props;_}, (`Assoc _ as json) ->
+    | Object {properties=Props props;_}, (`Assoc _ | `Null as json) ->
       let objs = (List.map (fun (name,sch) ->
           let json = (try Yojson.Safe.Util.member name json with _ -> `Null) in
           name, make_v sch json
         ) props)
       in
       Object objs
-    | Object {properties=PatProps props;_}, (`Assoc js) ->
-      let find_schema name props =
-        List.find_map (fun (re,_,s) -> if Re.execp re name then Some s else None) props
-      in
+    | Object {properties=PatProps _ as props;_}, (`Assoc js) ->
       let objs =
         List.filter_map (fun (name,json) ->
             Option.map (fun sch -> name,make_v sch json) (find_schema name props)
           ) js
       in
       Object objs
-    (* | Object {properties=PatProps _;_}, `Null -> make_v schema (`Assoc []) *)
     | _ -> failwith "unhandled json"
   in
   {schema; v=make_v schema json}
@@ -131,13 +132,13 @@ let get_arr path t =
   let {v;_} = Option.get (get path t) in
   match v with
   | Array ts -> ts
-  | _ -> failwith "error"
+  | _ -> failwith "array not on path"
 
 let get_obj path t =
   let {v;_} = Option.get (get path t) in
   match v with
   | Object ts -> ts
-  | _ -> failwith "error"
+  | _ -> failwith "object not on path"
 
 let rec assoc_update f k l =
   match l with
@@ -174,8 +175,8 @@ let rem_field p ({v;schema} as t) =
   let t = {t with v=aux (Jsonpath.to_list p) schema v} in
   t
 
-let add_field p ({v;schema} as t) =
-  Console.log ["add_field"; Jsonpath.to_string p];
+let add_item p ({v;schema} as t) =
+  Console.log ["add_item"; Jsonpath.to_string p];
   Console.log ["before"; Jstr.v @@ show t];
   let rec aux p {Schema.value;_} t  =
     match p,t,value with
@@ -186,6 +187,35 @@ let add_field p ({v;schema} as t) =
     | `Object s::tl,Object (ts),Object {properties=Props props;_} ->
       let schema = List.assoc s props in
       Object (assoc_update (aux tl schema) s ts)
+    | `Object s::tl,Object (ts),Object {properties=PatProps _ as props;_} -> begin
+        match find_schema s props with
+        | Some schema -> Object (assoc_update (aux tl schema) s ts)
+        | None -> failwith "didnt find schema"
+      end
+    | [],_,_ -> failwith "path doesn't lead to array"
+    | _ -> failwith "invalid path"
+  in
+  let t = {t with v=aux (Jsonpath.to_list p) schema v} in
+  Console.log ["after"; Jstr.v @@ show t];
+  t
+
+let add_field p str ({v;schema} as t) =
+  Console.log ["add_field"; Jsonpath.to_string p];
+  Console.log ["before"; Jstr.v @@ show t];
+  let rec aux p {Schema.value;_} t  =
+    match p,t,value with
+    | `Index i::tl,Array (ts),Array {items;_} -> Array(nth_update (aux tl items) i ts)
+    | [], Object (ts),Object {properties;_} ->
+      let {v;_} = make (Option.get (find_schema str properties)) `Null in
+      Object((str,v)::ts)
+    | `Object s::tl,Object (ts),Object {properties=Props props;_} ->
+      let schema = List.assoc s props in
+      Object (assoc_update (aux tl schema) s ts)
+    | `Object s::tl,Object (ts),Object {properties=PatProps _ as props;_} -> begin
+        match find_schema s props with
+        | Some schema -> Object (assoc_update (aux tl schema) s ts)
+        | None -> failwith "didnt find schema"
+      end
     | _ -> failwith "invalid path"
   in
   let t = {t with v=aux (Jsonpath.to_list p) schema v} in
@@ -230,6 +260,28 @@ let add_button el v =
   let e,send_e = E.create () in
   Ev.listen Ev.click (fun _ -> send_e v) (El.as_target el);
   e,el
+
+let regex_input regexes =
+  let but = El.button [El.txt' "add"] in
+  let input = El.input () in
+  let e,send_e = E.create () in
+  let cur,send_cur = S.create "" in
+  let cur = S.trace (fun str ->
+      match List.find_opt (fun (re,_,_) -> Re.execp re str) regexes with
+      | Some (_re,_reg_str,_) -> El.set_at (Jstr.v "disabled") None but
+      | None -> El.set_at (Jstr.v "disabled") (Some (Jstr.v "true")) but
+    ) cur
+  in
+  Ev.listen Ev.click (fun _ ->
+      send_e (S.value cur);
+      send_cur "";
+      El.set_prop El.Prop.value (Jstr.v "") input
+    ) (El.as_target but);
+  Ev.listen Ev.keyup (fun _ ->
+      let v = Jstr.to_string @@ El.prop El.Prop.value input in
+      send_cur v
+    ) (El.as_target input);
+  e,El.div [but;input]
 
 let simple_input ?(disabled=false) schema path value =
   let at = [At.value (Jstr.v value)] in
@@ -281,7 +333,7 @@ let view ?(disabled=false) ?(handle_required=true) ?(id="") model_s =
       let updated,s,el = simple_input ~disabled schema path s in
       s, E.map (fun s -> `Update (path,s)) updated , [el]
     | Array _ts, Array {items;_} ->
-      let add_e,but_el = add_button (El.txt' "+") (`AddField path) in
+      let add_e,but_el = add_button (El.txt' "+") (`AddItem path) in
       let ee,send_e = E.create () in
       let e = E.switch add_e ee in
       let at = [At.class' (Jstr.v "list")] in
@@ -310,8 +362,12 @@ let view ?(disabled=false) ?(handle_required=true) ?(id="") model_s =
         | PatProps props -> Option.get @@
           List.find_map (fun (re,_,sch) -> if Re.execp re str then Some sch else None) props
       in
-      let is_patprops = function |Schema.Props _ -> false | PatProps _ -> true in
-      let add_e,but_el = add_button (El.txt' "+") (`AddField path) in
+      let is_patprops = match properties with | Schema.Props _ -> false | PatProps _ -> true in
+      let but_e,but_el = match properties with
+        | PatProps props -> regex_input props
+        | Props _ -> E.never,El.div []
+      in
+      let add_e = E.map (fun str -> `AddField (path,str)) but_e in
       let ee, _send_e = E.create () in
       let e = E.switch add_e ee in
       let at = [At.class' (Jstr.v "object")] in
@@ -333,15 +389,16 @@ let view ?(disabled=false) ?(handle_required=true) ?(id="") model_s =
                 else v
               in
               let s = Printf.sprintf "%s (%s)" s (schema_to_short schema) in
-              let hdr = El.h4 [El.txt' s] in
+              let rem_e,rem_el = add_button (El.txt' "-") (`RemField path) in
+              let hdr = El.h4 (if is_patprops then [El.txt' s;rem_el] else [El.txt' s]) in
               let el = [hdr; El.div e] in
               let () = set_class v Validation.to_class hdr in
-              v,b,el
+              v,E.select [rem_e;b],el
             ) vs
           |> Util.unzip3
         in
         El.set_children parent
-          (if is_patprops properties then but_el::List.map El.div els else List.map El.div els);
+          (if is_patprops then but_el::List.map El.div els else List.map El.div els);
         _send_e (E.select (add_e::_ac_evs));
         S.merge Validation.merge `Valid validss
       in

@@ -7,7 +7,8 @@ type v = private
   | Array of v list
   | Object of (string * v) list [@@deriving show, eq]
 type action = [ `Update of Jsonpath.t * string
-              | `AddField of Jsonpath.t
+              | `AddItem of Jsonpath.t
+              | `AddField of Jsonpath.t * string
               | `RemField of Jsonpath.t ]
 
 module Validation : sig
@@ -22,17 +23,14 @@ module Validation : sig
 end
 
 val schema: t -> Schema.t
-val v: t -> v
 
 val equal: t -> t -> bool
 
-val get: Jsonpath.t -> t -> t option
-val get_arr: Jsonpath.t -> t -> v list
-val get_obj: Jsonpath.t -> t -> (string * v) list
 val to_yojson: t -> Yojson.Safe.t
 val make: Schema.t -> Yojson.Safe.t -> t
 val update: t -> Jsonpath.t -> string -> t
-val add_field: Jsonpath.t -> t -> t
+val add_field: Jsonpath.t -> string -> t -> t
+val add_item: Jsonpath.t -> t -> t
 val rem_field: Jsonpath.t -> t -> t
 
 val view:
