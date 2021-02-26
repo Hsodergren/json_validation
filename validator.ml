@@ -249,6 +249,15 @@ let simple_input ?(disabled=false) schema path value =
     ) target;
   update, e, el
 
+let schema_to_short {Schema.value;_} =
+  match value with
+  | Boolean -> "B"
+  | Integer _ -> "I"
+  | Number _ -> "F"
+  | String _ -> "S"
+  | Object _ -> "O"
+  | Array _ -> "A"
+
 let view ?(disabled=false) ?(handle_required=true) ?(id="") model_s =
   let (<+>) = Jsonpath.add in
   let set_attr signal to_str attr el =
@@ -314,6 +323,7 @@ let view ?(disabled=false) ?(handle_required=true) ?(id="") model_s =
               then Option.fold required ~none:v ~some:err_if_req
               else v
             in
+            let s = Printf.sprintf "%s (%s)" s (schema_to_short schema) in
             let hdr = El.h4 [El.txt' s] in
             let at = [At.class' (Jstr.v "object")] in
             let el = El.div ~at [hdr; El.div e] in
