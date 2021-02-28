@@ -79,6 +79,7 @@ let make schema json =
           ) js
       in
       Object objs
+    | Object {properties=PatProps _;_}, `Null -> Object []
     | _ -> failwith "unhandled json"
   in
   {schema; v=make_v schema json}
