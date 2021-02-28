@@ -116,7 +116,10 @@ let to_yojson {schema;v} =
       a f (function | (_,`Null) -> false | _ -> true) assoc ts
     | _ -> failwith "asd implemented"
   in
-  aux schema v
+  try
+    Some (aux schema v)
+  with _ ->
+    None
 
 let get path t =
   let rec aux path t =
@@ -254,6 +257,29 @@ let add_button el v =
   Ev.listen Ev.click (fun _ -> send_e v) (El.as_target el);
   e,el
 
+let visible_fields {v;_} re =
+  let rec aux set path = function
+    | Simple _ -> []
+    | Array vs ->
+      let _,child_set =List.fold_left (fun (i,set) v ->
+          let s = aux [] (Jsonpath.add path (`Index i)) v in
+          (i+1,s @ set)
+        ) (0,set) vs
+      in
+      set @ child_set
+    | Object vs ->
+      let child_set = List.fold_left (fun set (str,v) ->
+          let path = Jsonpath.add path (`Object str) in
+          let s = aux [] path v in
+          match s with
+          | [] -> if Re.execp re str then path::s @ set else s @ set
+          | _ -> path::s @ set
+        ) (set) vs
+      in
+      set @ child_set
+  in
+  aux [Jsonpath.empty] Jsonpath.empty v
+
 let regex_input regexes =
   let but = El.button [El.txt' "add"] in
   let input = El.input ~at:[At.class' (Jstr.v "reg_input")] () in
@@ -316,7 +342,9 @@ let prev_if_err f start =
       !last
     with _ -> !last
 
-let view ?(disabled=false) ?(handle_required=true) ?(id="") model_s =
+let view ?(disabled=false) ?(handle_required=true) ?(id="") ?(search=S.const "") model_s =
+  let search_re = S.map (fun str -> Re.Posix.re str |> Re.compile) search in
+  let visibles = S.l2 visible_fields model_s search_re in
   let (<+>) = Jsonpath.add in
   let set_attr signal to_str attr el =
     S.trace (fun v ->
@@ -392,13 +420,17 @@ let view ?(disabled=false) ?(handle_required=true) ?(id="") model_s =
               let rem_e,rem_el = add_button (El.txt' "-") (`RemField path) in
               let hdr = El.h4 (if is_patprops then [El.txt' s;rem_el] else [El.txt' s]) in
               let el = [hdr; El.div e] in
+              let obj = El.div el in
+              let _ = S.trace (fun paths ->
+                  El.set_class (Jstr.v "hide") (not @@ List.mem path paths) obj) visibles
+              in
               let () = set_class v Validation.to_class hdr in
-              v,E.select [rem_e;b],el
+              v,E.select [rem_e;b],obj
             ) vs
           |> Util.unzip3
         in
         El.set_children parent
-          (if is_patprops then but_el::List.map El.div els else List.map El.div els);
+          (if is_patprops then but_el::els else els);
         _send_e (E.select (add_e::_ac_evs));
         S.merge Validation.merge `Valid validss
       in

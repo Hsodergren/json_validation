@@ -77,26 +77,45 @@ let errors_to_str errs =
   List.map (fun (p,s) -> Printf.sprintf "%s : %s\n" (Jsonpath.to_string p) s) errs
   |> List.map Jstr.v
 
-let create_result models_s =
+let searchbar () =
+  let el = El.input () in
+  let s,send_s = S.create "" in
+  Ev.listen Ev.keyup (fun _ ->
+      let v = El.prop El.Prop.value el in
+      send_s (Jstr.to_string v)
+    ) (El.as_target el);
+  s,el
+
+let (<*>) f o =
+  match f,o with
+  | Some f, Some o -> Some (f o)
+  | _ -> None
+
+let (<$>) = Option.map
+
+let create_result ?(search=S.const "") models_s =
   match models_s with
   | [] -> El.div []
   | hd::_ ->
     let schema = Model.schema (S.value hd) in
     let jsons = List.map (S.map Model.to_yojson) models_s in
-    let s = S.merge (Jsch.Merge.merge) (`Assoc []) jsons in
+    let s = S.merge (fun a b -> Jsch.Merge.merge <$> a <*> b) (Some (`Assoc [])) jsons in
     let parent = El.div [] in
     set_children s (fun json ->
-        Console.log [Jstr.v @@ Yojson.Safe.to_string json];
-        let model = Model.make schema json in
-        S.const model
-        |> Model.view ~disabled:true ~id:"result"
-        |> trd
+        match json with
+        | Some json ->
+          Console.log [Jstr.v @@ Yojson.Safe.to_string json];
+          let model = Model.make schema json in
+          S.const model
+          |> Model.view ~disabled:true ~id:"result" ~search
+          |> trd
+        | None -> []
       ) parent;
     parent
 
-let validator ?(disabled=false) ?(handle_required=true) model =
+let validator ?(disabled=false) ?(handle_required=true) ?(search=S.const "")model =
   let def model_s =
-    let v,a,el = Model.view ~disabled ~handle_required model_s in
+    let v,a,el = Model.view ~disabled ~handle_required ~search model_s in
     let apply_action = E.map apply_action a in
     let model_s' = S.accum ~eq:Model.equal apply_action (S.value model_s) in
     model_s',(model_s',v,el)
@@ -104,18 +123,19 @@ let validator ?(disabled=false) ?(handle_required=true) model =
   S.fix ~eq:Model.equal model def
 
 let main_ui schema jsons =
+  let sb_s, sb_el = searchbar () in
   let models,_vs,uis =
     List.mapi (fun i j -> Model.make schema j,i=0) jsons
-    |> List.map (fun (m,b) -> validator ~handle_required:b m)
+    |> List.map (fun (m,b) -> validator ~handle_required:b ~search:sb_s m)
     |> Util.unzip3
   in
-  let result_ui = create_result models in
+  let result_ui = create_result models ~search:sb_s in
   let validators = List.map (fun el ->
       El.div ~at:[At.class' (Jstr.v "validator")] el
     ) uis
   in
   let result_ui = El.div ~at:[At.class' (Jstr.v "result")] [result_ui] in
-  result_ui::validators
+  sb_el::result_ui::validators
 
 let main () =
   let id = Jstr.v "main" in
