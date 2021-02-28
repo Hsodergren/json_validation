@@ -78,7 +78,7 @@ let errors_to_str errs =
   |> List.map Jstr.v
 
 let searchbar () =
-  let el = El.input () in
+  let el = El.input ~at:[At.class' (Jstr.v "searchbar"); At.placeholder (Jstr.v "Search")] () in
   let s,send_s = S.create "" in
   Ev.listen Ev.keyup (fun _ ->
       let v = El.prop El.Prop.value el in
@@ -122,8 +122,11 @@ let validator ?(disabled=false) ?(handle_required=true) ?(search=S.const "")mode
   in
   S.fix ~eq:Model.equal model def
 
-let main_ui schema jsons =
+let header () =
   let sb_s, sb_el = searchbar () in
+  sb_s, El.div ~at:[At.class' (Jstr.v "header")] [sb_el]
+
+let body schema jsons sb_s =
   let models,_vs,uis =
     List.mapi (fun i j -> Model.make schema j,i=0) jsons
     |> List.map (fun (m,b) -> validator ~handle_required:b ~search:sb_s m)
@@ -134,8 +137,14 @@ let main_ui schema jsons =
       El.div ~at:[At.class' (Jstr.v "validator")] el
     ) uis
   in
+  let validators = El.div ~at:[At.class' (Jstr.v "validators")] validators in
   let result_ui = El.div ~at:[At.class' (Jstr.v "result")] [result_ui] in
-  sb_el::result_ui::validators
+  El.div ~at:[At.class' (Jstr.v "content")] [result_ui;validators]
+
+let main_ui schema jsons =
+  let sb_s, header_el = header () in
+  let body_el = body schema jsons sb_s in
+  El.div [header_el;body_el]
 
 let main () =
   let id = Jstr.v "main" in
@@ -144,6 +153,6 @@ let main () =
   | Some el ->
     let jsons = [json;json2;json2] in
     let ui = main_ui schema jsons in
-    El.set_children el ui
+    El.set_children el [ui]
 
 let () = main ()
