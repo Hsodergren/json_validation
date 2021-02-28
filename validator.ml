@@ -418,7 +418,7 @@ let view ?(disabled=false) ?(handle_required=true) ?(id="") ?(search=S.const "")
               in
               let s = Printf.sprintf "%s (%s)" s (schema_to_short schema) in
               let rem_e,rem_el = add_button (El.txt' "-") (`RemField path) in
-              let hdr = El.h4 (if is_patprops then [El.txt' s;rem_el] else [El.txt' s]) in
+              let hdr = El.h4 (if is_patprops && not disabled then [El.txt' s;rem_el] else [El.txt' s]) in
               let el = [hdr; El.div e] in
               let obj = El.div el in
               let _ = S.trace (fun paths ->
@@ -430,7 +430,7 @@ let view ?(disabled=false) ?(handle_required=true) ?(id="") ?(search=S.const "")
           |> Util.unzip3
         in
         El.set_children parent
-          (if is_patprops then but_el::els else els);
+          (if is_patprops && not disabled then but_el::els else els);
         _send_e (E.select (add_e::_ac_evs));
         S.merge Validation.merge `Valid validss
       in
