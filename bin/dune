@@ -1,0 +1,4 @@
+(executable
+ (name server)
+ (libraries cohttp cohttp-lwt-unix routes yojson types)
+ (preprocess (pps ppx_deriving_yojson)))

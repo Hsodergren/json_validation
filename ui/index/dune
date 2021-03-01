@@ -1,0 +1,14 @@
+(executable
+ (name index)
+ (modes js)
+ (libraries brr yojson)
+ (preprocess (pps js_of_ocaml-ppx)))
+
+(rule
+ (targets index.js)
+ (deps index.bc.js)
+ (action (run cp %{deps} %{targets})))
+
+(alias
+ (name app)
+ (deps index.js index.html))

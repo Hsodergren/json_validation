@@ -1,6 +1,7 @@
 (lang dune 2.8)
 (name json_editor)
 (version 0.1)
+(maintainers "asd")
 
 (generate_opam_files true)
 

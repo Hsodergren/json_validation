@@ -1,9 +1,9 @@
 (executable
  (name main)
- (libraries yojson jsch react brr ppx_deriving)
+ (libraries yojson jsch react brr ppx_deriving types)
  (modes js)
  (link_flags (:standard -no-check-prims))
- (preprocess (pps js_of_ocaml-ppx ppx_deriving.eq ppx_deriving.show)))
+ (preprocess (pps js_of_ocaml-ppx ppx_deriving.eq ppx_deriving.show ppx_deriving_yojson)))
 
 (rule
  (targets main.js)

@@ -1,62 +1,9 @@
 open Brr
+open Brr_io
 open React
 open Jsch
 
 module Model = Validator
-
-let schema = {|
-{
-  "type": "object",
-  "properties": {
-    "asd": { "type": "integer" },
-    "bqwe": {"type": "string", "maxLength": 10, "minLength": 3 },
-    "c": { "type": "array", "items": {"type": "string", "maxLength": 10, "minLength": 3 }},
-    "d": {
-    "type": "object",
-     "properties": { "da": {"type": "integer" }, "db": {"type": "string", "maxLength": 10, "minLength": 3 }},
-     "required": ["da"]
-    },
-    "e": { "type": "array", "items": { "type": "object", "properties": { "a" : { "type":"boolean" }, "b" : { "type": "number"}}}},
-    "arrarr": { "type": "array", "items": { "type": "array", "items": { "type": "number"}}},
-  "pats": { "type" : "object", "patternProperties" : {"^a.*$" : {"type": "string"}, "^q.*$" : {"type": "integer"}}}
-  }
-}
-|}
-let schema =
-  match Jsch.Schema.of_string schema with
-  | Ok x -> (Console.log [Jstr.v "success"];x)
-  | Error s -> (Console.log [Jstr.v s]; failwith s)
-
-let json = {|
-{
-"asd": 5,
-"c": ["1","2","3"],
-"d": {
-  "da":1,
-  "db":"asd"
-  },
-"e": [{"a":true, "b":1.2}, {"a": false, "b":5}],
-"arrarr": [[]],
-"pats": {"aaaa":"qwe", "q":1}
-}
-|}
-(* "asd": "qwe","bwe": 12 *)
-let json = Yojson.Safe.from_string json
-let json2 = {|
-{
-"asd": 5,
-"c": ["asd","qwe"],
-"d": {
-  "da":1,
-  "db":"asd"
-  },
-"e": [{"a":true, "b":1.2}, {"a": false, "b":5}],
-"arrarr": [[],[]],
-"pats": {"aaaa":"qwe", "q":1}
-}
-|}
-(* "asd": "qwe","bwe": 12 *)
-let json2 = Yojson.Safe.from_string json2
 
 let set_children signal f el =
   S.trace (fun v ->
@@ -101,8 +48,7 @@ let create_result ?(search=S.const "") models_s =
     let jsons = List.map (S.map Model.to_yojson) models_s in
     let s = S.merge (fun a b -> Jsch.Merge.merge <$> a <*> b) (Some (`Assoc [])) jsons in
     let parent = El.div [] in
-    set_children s (fun json ->
-        match json with
+    set_children s (function
         | Some json ->
           Console.log [Jstr.v @@ Yojson.Safe.to_string json];
           let model = Model.make schema json in
@@ -146,13 +92,30 @@ let main_ui schema jsons =
   let body_el = body schema jsons sb_s in
   El.div [header_el;body_el]
 
+let get_ui () =
+  let open Fut.Result_syntax in
+  let uri = Brr.Window.location Brr.G.window in
+  let m = Brr.Uri.Params.of_jstr (Uri.query uri) |> Uri.Params.find (Jstr.v "module") in
+  let open Fetch in
+  let req = Request.v ~init:(Request.init ()) (Jstr.append (Jstr.v "/module/") (m |> Option.get)) in
+  let* resp = Fetch.request req in
+  let* body = Fetch.Response.as_body resp |> Fetch.Body.text in
+  let ui =
+    match Types.Module.of_yojson (Yojson.Safe.from_string (Jstr.to_string body)) with
+    | Ok {schema;jsons} -> main_ui (Jsch.Schema.of_yojson schema |> Result.get_ok) jsons
+    | Error str -> El.txt' str
+  in
+  Fut.return @@ Ok (ui)
+
 let main () =
   let id = Jstr.v "main" in
   match Document.find_el_by_id G.document id with
   | None -> Console.(error ["no element with name main"])
   | Some el ->
-    let jsons = [json;json2;json2] in
-    let ui = main_ui schema jsons in
-    El.set_children el [ui]
+    ignore @@
+    Fut.bind (get_ui ()) (function
+      | Ok ui -> Fut.return @@ El.set_children el [ui]
+      | Error str -> Fut.return @@ El.set_children el [El.txt (Jv.Error.message str)]
+      )
 
-let () = main ()
+let () = ignore @@ main ()

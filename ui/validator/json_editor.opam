@@ -3,6 +3,7 @@ opam-version: "2.0"
 version: "0.1"
 synopsis: "test"
 description: "asd"
+maintainer: ["asd"]
 depends: [
   "dune" {>= "2.8"}
   "yojson" {>= "1.7.0"}
