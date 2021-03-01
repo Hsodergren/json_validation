@@ -1,9 +1,10 @@
 (* open Lwt * open Cohttp *)
-open Cohttp_lwt_unix
+(* open Cohttp_lwt_unix *)
 
 let asdpath = Sys.argv.(1)
 
-let schema = {|
+module T = struct
+  let schema = {|
 {
   "type": "object",
   "properties": {
@@ -22,7 +23,7 @@ let schema = {|
 }
 |}
 
-let json = {|
+  let json = {|
 {
 "asd": 5,
 "c": ["1","2","3"],
@@ -35,8 +36,8 @@ let json = {|
 "pats": {"aaaa":"qwe", "q":1}
 }
 |}
-(* "asd": "qwe","bwe": 12 *)
-let json2 = {|
+  (* "asd": "qwe","bwe": 12 *)
+  let json2 = {|
 {
 "asd": 5,
 "c": ["asd","qwe"],
@@ -49,44 +50,20 @@ let json2 = {|
 "pats": {"aaaa":"qwe", "q":1}
 }
 |}
-let () = print_endline asdpath
+  type cfg = unit
+  type t = (string * Types.Module.t) list
 
-let get_jsons () =
-  let schema = Yojson.Safe.from_string schema in
-  let json = Yojson.Safe.from_string json in
-  let json2 = Yojson.Safe.from_string json2 in
-  {Types.Module.schema=schema;jsons=[json;json2;json2;json;json;json;json;json;json]}
+  let make () =
+    let fs = Yojson.Safe.from_string in
+    let schema,json,json2 = fs schema, fs json, fs json2 in
+    [ "asd", {Types.Module.schema;jsons=[json;json;json;json2]}
+    ; "qwe", {Types.Module.schema;jsons=[json;json2;json2;json]}
+    ; "poqwe", {Types.Module.schema;jsons=[json;json2]}
+    ]
 
-let index () = Routes.(empty @--> `Root)
-let modul () = Routes.(s "module" / str /? nil @--> fun _ -> `Module (get_jsons ()))
-let file () = Routes.(s "file" / str / str /? nil @--> fun dir fname -> `File (dir,fname))
-let all = Routes.one_of [index (); modul ();file ()]
+  let get_module t m = List.assoc_opt m t
+  let get_module_list t = List.map fst t |> Types.ModuleList.of_list
+end
+module Serv = Vserver.Make(T)
 
-let opt_or_notfound o f =
-  match o with
-  | Some str -> f str
-  | None -> Server.respond_not_found ()
-
-let (>|?) = opt_or_notfound
-
-let ok ~body =
-  Server.respond_string ~status:`OK ~body ()
-
-let res = function
-  | Ok body -> ok ~body
-  | Error str -> Server.respond_error ~status:`Bad_request ~body:str ()
-
-let main =
-  let callback _conn req _body =
-    let path = req |> Request.uri |> Uri.path in
-    Printf.printf "path: %s\n" path;
-    Routes.match' all ~target:path >|? function
-      | `Root -> Server.respond_redirect ~uri:(Uri.of_string "/file/index/index.html") ()
-      | `Module m -> ok ~body:(Yojson.Safe.to_string (Types.Module.to_yojson m))
-      | `File (dir,fname) ->
-        let fname = Server.resolve_local_file ~docroot:asdpath ~uri:(Uri.of_string (dir ^"/"^fname)) in
-        Server.respond_file ~fname ()
-  in
-  Server.create ~mode:(`TCP (`Port 8080)) (Server.make ~callback ())
-
-let () = ignore (Lwt_main.run main)
+let () = ignore (Lwt_main.run (Serv.start () (Fpath.v asdpath)))

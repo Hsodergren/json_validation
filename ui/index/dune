@@ -1,7 +1,7 @@
 (executable
  (name index)
  (modes js)
- (libraries brr yojson)
+ (libraries brr yojson types)
  (preprocess (pps js_of_ocaml-ppx)))
 
 (rule
