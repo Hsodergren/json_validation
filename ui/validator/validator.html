@@ -14,12 +14,31 @@
     #main > .object {
         margin-left: 0px
     }
+    .header {
+        height:50px
+    }
+    .content {
+        padding-top:50px
+    }
     .validators {
-        overflow-x:scroll;
-        white-space: nowrap;
+        display:flex;
+        overflow:auto;
+    }
+    div.validator {
+        flex:0 0 auto;
+        padding-left:5px;
+        padding-right:10px;
+        padding-bottom:20px;
+        border-right:solid black 1px;
+    }
+    div.result {
+        float:right;
+        padding-left:5px;
+        padding-right:10px;
+        padding-bottom:20px;
+        background-color:#ffefff;
     }
     .validator > .object {
-        margin-top:50px;
         margin-left: 0px;
     }
     .object {
@@ -73,20 +92,6 @@
     }
     li.empty {
         color: #ff8
-    }
-    div.validator {
-        display:inline-block;
-        padding-left:5px;
-        padding-right:10px;
-        padding-bottom:20px;
-        border-right:solid black 1px;
-    }
-    div.result {
-        float:right;
-        padding-left:5px;
-        padding-right:10px;
-        padding-bottom:20px;
-        background-color:#ffefff;
     }
     .object[vis=visible] {
         display:default
