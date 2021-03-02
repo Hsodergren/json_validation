@@ -3,7 +3,7 @@
 
 let asdpath = Sys.argv.(1)
 
-module T = struct
+module T : Vserver.S_Type with type cfg = unit = struct
   let schema = {|
 {
   "type": "object",
@@ -61,8 +61,14 @@ module T = struct
     ; "poqwe", {Types.Module.schema;jsons=[json;json2]}
     ]
 
+  let rec assoc_update k v = function
+    | [] -> []
+    | (khd,_)::tl when khd = k -> (k,v)::tl
+    | hd::tl -> hd::assoc_update k v tl
+
   let get_module t m = List.assoc_opt m t
   let get_module_list t = List.map fst t |> Types.ModuleList.of_list
+  let save t m name = assoc_update name m t
 end
 module Serv = Vserver.Make(T)
 
