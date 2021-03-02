@@ -343,6 +343,13 @@ let prev_if_err f start =
       !last
     with _ -> !last
 
+let get_description_text {Schema.description;_} =
+  match description with
+  | Some desc ->El.span
+                  ~at:[At.class' (Jstr.v "description")]
+                  [El.txt' desc]
+  | None -> El.span []
+
 let view ?(disabled=false) ?(handle_required=true) ?(id="") ?(search=S.const "") model_s =
   let search_re = S.map (fun str -> Re.Posix.re str |> Re.compile) search in
   let visibles = S.l2 visible_fields model_s search_re in
@@ -419,7 +426,11 @@ let view ?(disabled=false) ?(handle_required=true) ?(id="") ?(search=S.const "")
               in
               let s = Printf.sprintf "%s (%s)" s (schema_to_short schema) in
               let rem_e,rem_el = add_button (El.txt' "-") (`RemField path) in
-              let hdr = El.h4 (if is_patprops && not disabled then [El.txt' s;rem_el] else [El.txt' s]) in
+              let desc = get_description_text schema in
+              let hdr = El.h4 (if is_patprops && not disabled
+                               then [El.txt' s;rem_el;desc]
+                               else [El.txt' s;desc])
+              in
               let el = [hdr; El.div e] in
               let obj = El.div el in
               let _ = S.trace (fun paths ->

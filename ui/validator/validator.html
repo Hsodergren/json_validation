@@ -15,10 +15,47 @@
         margin-left: 0px
     }
     .header {
+        z-index:1;
         height:40px
     }
     .content {
+        z-index:0;
         padding-top:40px
+    }
+    h1 {
+        margin-bottom: 0px;
+        margin-top: 5px;
+    }
+    h4 {
+        position: relative;
+        display: inline-block;
+    }
+    h4 .description {
+        visibility:hidden;
+        font-size:13px;
+        font-weight: 500;
+        width: 300px;
+        background-color: #eee;
+        color: black;
+        border:1px solid black;
+        /* text-align: center; */
+        border-radius: 6px;
+        padding: 5px;
+
+        /* Position the tooltip */
+        position: absolute;
+        z-index: 1;
+        top: -5px;
+    }
+    .validators h4 .description {
+        left:105%;
+    }
+    .result h4 .description {
+        right:105%;
+    }
+    h4:hover .description {
+        visibility: visible;
+        transition-delay:0.3s;
     }
     .validators {
         display:flex;
@@ -54,6 +91,7 @@
         outline:none
     }
     .searchbar {
+        z-index: 5;
         margin: auto;
         margin-left:25%;
         width: 50%;

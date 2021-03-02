@@ -5,10 +5,10 @@ module T : Vserver.S_Type with type cfg = unit = struct
 {
   "type": "object",
   "properties": {
-    "asd": { "type": "integer" },
-    "bqwe": {"type": "string", "maxLength": 10, "minLength": 3 },
+    "asd": { "type": "integer", "description":"this is an integer value" },
+    "bqwe": {"type": "string", "maxLength": 10, "minLength": 3, "description": "testtesttest"},
     "c": { "type": "array", "items": {"type": "string", "maxLength": 10, "minLength": 3 }},
-    "d": {
+    "d": {"description":"this is an integer value",
     "type": "object",
      "properties": { "da": {"type": "integer" }, "db": {"type": "string", "maxLength": 10, "minLength": 3 }},
      "required": ["da"]
