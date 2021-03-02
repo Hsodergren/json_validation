@@ -442,4 +442,5 @@ let view ?(disabled=false) ?(handle_required=true) ?(id="") ?(search=S.const "")
       failwith "error"
   in
   let m = S.value model_s in
-  aux (v m) (schema m) Jsonpath.empty
+  let a,b,el = aux (v m) (schema m) Jsonpath.empty in
+  a,b,El.h1 [El.txt' id]::el

@@ -13,7 +13,7 @@ end
 module Module = struct
   type t = {
     schema : Yojson.Safe.t;
-    jsons : Yojson.Safe.t list
+    jsons : (string * Yojson.Safe.t) list
   } [@@deriving yojson]
 
   let v schema jsons = {schema;jsons}

@@ -53,9 +53,9 @@ module T : Vserver.S_Type with type cfg = unit = struct
   let make () =
     let fs = Yojson.Safe.from_string in
     let schema,json,json2 = fs schema, fs json, fs json2 in
-    [ "asd", {Types.Module.schema;jsons=[json;json;json;json2]}
-    ; "qwe", {Types.Module.schema;jsons=[json;json2;json2;json]}
-    ; "poqwe", {Types.Module.schema;jsons=[json;json2]}
+    [ "asd", {Types.Module.schema;jsons=["j1",json;"j2",json;"j3",json;"j4",json2]}
+    ; "qwe", {Types.Module.schema;jsons=["asd",json;"qwe",json2;"zxc",json2;"fgh",json]}
+    ; "poqwe", {Types.Module.schema;jsons=["base",json;"system",json2]}
     ]
 
   let rec assoc_update k v = function

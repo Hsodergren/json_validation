@@ -13,6 +13,12 @@ let set_children signal f el =
 
 let trd (_,_,x) = x
 
+let rec zip l1 l2 =
+  match l1,l2 with
+  | hd1::tl1,hd2::tl2 -> (hd1,hd2)::zip tl1 tl2
+  | [], [] -> []
+  | _ -> failwith "lists different lengths"
+
 let apply_action action model =
   match action with
   | `Update (p,str) -> Model.update model p str
@@ -59,9 +65,9 @@ let create_result ?(search=S.const "") models_s =
       ) parent;
     parent
 
-let validator ?(disabled=false) ?(handle_required=true) ?(search=S.const "")model =
+let validator ?(disabled=false) ?(handle_required=true) ?(search=S.const "") ~id model =
   let def model_s =
-    let v,a,el = Model.view ~disabled ~handle_required ~search model_s in
+    let v,a,el = Model.view ~disabled ~handle_required ~search ~id model_s in
     let apply_action = E.map apply_action a in
     let model_s' = S.accum ~eq:Model.equal apply_action (S.value model_s) in
     model_s',(model_s',v,el)
@@ -93,7 +99,7 @@ let save name models schema =
   let open Fut.Result_syntax in
   let body =
     models
-    |> List.map (fun m -> Option.get (Model.to_yojson m))
+    |> List.map (fun (name,m) -> name,Option.get (Model.to_yojson m))
     |> Types.Module.v schema
     |> Types.Module.to_yojson
     |> Yojson.Safe.to_string
@@ -109,8 +115,8 @@ let save name models schema =
 let body name schemajson jsons sb_s save_enable c =
   let schema = Schema.of_yojson schemajson |> Result.get_ok in
   let models,_vs,uis =
-    List.mapi (fun i j -> Model.make schema j,i=0) jsons
-    |> List.map (fun (m,b) -> validator ~handle_required:b ~search:sb_s m)
+    List.mapi (fun i (name,j) -> name,Model.make schema j,i=0) jsons
+    |> List.map (fun (id,m,b) -> validator ~handle_required:b ~search:sb_s ~id m)
     |> Util.unzip3
   in
   let result_ui = create_result models ~search:sb_s in
@@ -123,16 +129,18 @@ let body name schemajson jsons sb_s save_enable c =
       (S.merge (fun b v -> b && match v with | `Valid | `Empty -> true | _ -> false) true _vs)
   in
   let _ = E.trace (fun _ ->
-      let models = List.map S.value models in
+      let models = zip (List.map fst jsons) (List.map S.value models) in
       match models with
       | [] -> Console.error ["no models to save"]
       | _::_ ->
         Console.log["saving"];
+        save_enable false;
         let save_fut = save name models schemajson in
         Fut.await save_fut (function
             | Ok () -> Console.log["saving done"];
             | Error err -> Console.log [Jv.Error.message err]
-          )
+          );
+        save_enable true
     ) c
   in
   let validators = El.div ~at:[At.class' (Jstr.v "validators")] validators in
