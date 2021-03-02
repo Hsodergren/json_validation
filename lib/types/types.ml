@@ -15,4 +15,6 @@ module Module = struct
     schema : Yojson.Safe.t;
     jsons : Yojson.Safe.t list
   } [@@deriving yojson]
+
+  let v schema jsons = {schema;jsons}
 end

@@ -1,6 +1,3 @@
-(* open Lwt * open Cohttp *)
-(* open Cohttp_lwt_unix *)
-
 let asdpath = Sys.argv.(1)
 
 module T : Vserver.S_Type with type cfg = unit = struct
