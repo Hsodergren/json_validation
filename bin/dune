@@ -1,4 +1,11 @@
 (executable
  (name server)
- (libraries cohttp cohttp-lwt-unix routes yojson types vserver fpath)
+ (modules server)
+ (libraries yojson types vserver fpath)
+ (preprocess (pps ppx_deriving_yojson)))
+
+(executable
+ (name fileserver)
+ (modules fileserver)
+ (libraries yojson types vserver fpath)
  (preprocess (pps ppx_deriving_yojson)))
