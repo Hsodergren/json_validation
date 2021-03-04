@@ -291,9 +291,13 @@ let regex_input regexes =
   let e,send_e = E.create () in
   let cur,send_cur = S.create "" in
   let cur_a = S.map (fun str ->
+      let disable () = El.set_at (Jstr.v "disabled") (Some (Jstr.v "true")) but in
+      let enable () = El.set_at (Jstr.v "disabled") None but in
+      if str = "" then (disable(); None)
+      else
       match List.find_opt (fun (re,_,_) -> Re.execp re str) regexes with
-      | Some (_re,_reg_str,_) -> El.set_at (Jstr.v "disabled") None but; Some _reg_str
-      | None -> El.set_at (Jstr.v "disabled") (Some (Jstr.v "true")) but; None
+      | Some (_re,_reg_str,_) -> enable (); Some _reg_str
+      | None -> disable (); None
     ) cur
   in
   ignore @@ S.trace (function
