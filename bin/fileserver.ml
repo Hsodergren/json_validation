@@ -4,7 +4,7 @@ let conf_path = Sys.argv.(2)
 let y2j_cmd f =
   Printf.sprintf {|python3 -c 'import sys, yaml, json; y=yaml.safe_load(open("%s")); print(json.dumps(y))'|} f
 
-let j2y_cmd = "python3 -c 'import sys, yaml, json; y=json.loads(sys.stdin.read()); print(yaml.dump(y))'"
+let j2y_cmd = "python3 -c 'import sys, yaml, json; y=json.loads(sys.stdin.read()); print(yaml.dump(y,default_flow_style=False))'"
 
 let input_read_all inc =
   let data = Buffer.create 0 in
