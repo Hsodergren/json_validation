@@ -2,6 +2,8 @@ open Brr
 open Jsch
 open React
 
+module JPSet = Set.Make(Jsch.Jsonpath)
+
 module Validation = struct
   type t = [
     | `Valid
@@ -260,26 +262,27 @@ let add_button el v =
 
 let visible_fields {v;_} re =
   let rec aux set path = function
-    | Simple _ -> []
+    | Simple _ -> JPSet.empty
     | Array vs ->
-      let _,child_set =List.fold_left (fun (i,set) v ->
-          let s = aux [] (Jsonpath.add path (`Index i)) v in
-          (i+1,s @ set)
+      let _,child_set = List.fold_left (fun (i,set) v ->
+          let s = aux JPSet.empty (Jsonpath.add path (`Index i)) v in
+          (i+1,JPSet.union s set)
         ) (0,set) vs
       in
-      set @ child_set
+      JPSet.union set child_set
     | Object vs ->
       let child_set = List.fold_left (fun set (str,v) ->
           let path = Jsonpath.add path (`Object str) in
-          let s = aux [] path v in
-          match s with
-          | [] -> if Re.execp re str then path::s @ set else s @ set
-          | _ -> path::s @ set
+          let s = aux JPSet.empty path v in
+          let u = JPSet.union s set in
+          if not (JPSet.is_empty s) || Re.execp re str
+          then JPSet.add path u
+          else u
         ) (set) vs
       in
-      set @ child_set
+      JPSet.union set child_set
   in
-  aux [Jsonpath.empty] Jsonpath.empty v
+  aux (JPSet.of_list [Jsonpath.empty]) Jsonpath.empty v
 
 let regex_input regexes =
   let but = El.button [El.txt' "add"] in
@@ -434,7 +437,7 @@ let view ?(disabled=false) ?(handle_required=true) ?(id="") ?(search=S.const "")
               let el = [hdr; El.div e] in
               let obj = El.div el in
               let _ = S.trace (fun paths ->
-                  El.set_class (Jstr.v "hide") (not @@ List.mem path paths) obj) visibles
+                  El.set_class (Jstr.v "hide") (not @@ JPSet.mem path paths) obj) visibles
               in
               let () = set_class v Validation.to_class hdr in
               v,E.select [rem_e;b],obj
