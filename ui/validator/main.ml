@@ -56,7 +56,6 @@ let create_result ?(search=S.const "") models_s =
     let parent = El.div [] in
     set_children s (function
         | Some json ->
-          Console.log [Jstr.v @@ Yojson.Safe.to_string json];
           let model = Model.make schema json in
           S.const model
           |> Model.view ~disabled:true ~id:"result" ~search
