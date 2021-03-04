@@ -51,7 +51,7 @@ let create_result ?(search=S.const "") models_s =
   | [] -> El.div []
   | hd::_ ->
     let schema = Model.schema (S.value hd) in
-    let jsons = List.map (S.map Model.to_yojson) models_s in
+    let jsons = List.mapi (fun i sm -> S.map (Model.to_yojson ~handle_required:(i=0)) sm) models_s in
     let s = S.merge (fun a b -> Jsch.Merge.merge <$> a <*> b) (Some (`Assoc [])) jsons in
     let parent = El.div [] in
     set_children s (function
@@ -98,7 +98,7 @@ let save name models schema =
   let open Fut.Result_syntax in
   let body =
     models
-    |> List.map (fun (name,m) -> name,Option.get (Model.to_yojson m))
+    |> List.mapi (fun i (name,m) -> name,Option.get (Model.to_yojson ~handle_required:(i=0) m))
     |> Types.Module.v schema
     |> Types.Module.to_yojson
     |> Yojson.Safe.to_string

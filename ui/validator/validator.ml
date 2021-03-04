@@ -86,7 +86,7 @@ let make schema json =
   in
   {schema; v=make_v schema json}
 
-let to_yojson {schema;v} =
+let to_yojson ?(handle_required=false) {schema;v} =
   let list l = `List l in
   let assoc l = `Assoc l in
   let a f ff b ts =
@@ -98,29 +98,39 @@ let to_yojson {schema;v} =
     | [] -> `Null
     | _ -> b l
   in
-  let rec aux {Schema.value;_} v =
+  let rec aux {Schema.value;_} ~req v  =
+    let req = handle_required && req in
     match value,v with
-    | (Number _ | Integer _ | String _ | Boolean), Simple "" -> `Null
+    | (Number _ | Integer _ | Boolean), Simple "" -> `Null
     | Number _, Simple s -> `Float (float_of_string s)
     | Integer _, Simple s -> `Int (int_of_string s)
+    | String _, Simple "" -> if req then `String "" else `Null
     | String _, Simple s -> `String s
     | Boolean, Simple s -> `Bool (bool_of_string s)
-    | Array {items;_}, Array ts -> a (aux items) (function `Null -> false | _ -> true) list ts
-    | Object {properties=Props props;_}, Object ts ->
-        a (fun (s,t) -> s,aux (List.assoc s props) t)
-          (function | (_,`Null) -> false | _ -> true)
-          assoc
-          ts
-    | Object {properties=PatProps props;_}, Object ts ->
+    | Array {items;_}, Array ts -> begin
+      let res = a (aux items ~req:false) (function `Null -> false | _ -> true) list ts in
+      match res with
+        | `Null -> if req then `List [] else `Null
+        | a -> a
+      end
+    | Object {properties=Props props;required}, Object ts ->
+      let required = Option.value ~default:[] required in
+      a (fun (s,t) -> s,aux (List.assoc s props) t ~req:(List.mem s required))
+        (function | (_,`Null) -> false | _ -> true)
+        assoc
+        ts
+    | Object {properties=PatProps props;required}, Object ts ->
+      let required = Option.value ~default:[] required in
       let f (s,t) =
-            let (_,_,schema) = List.find (fun (re,_,_) -> Re.execp re s) props in
-            s, aux schema t
+        let (_,_,schema) = List.find (fun (re,_,_) -> Re.execp re s) props in
+        s, aux schema t ~req:(List.mem s required)
       in
       a f (function | (_,`Null) -> false | _ -> true) assoc ts
     | _ -> failwith "asd implemented"
   in
   try
-    Some (aux schema v)
+    let json = aux schema v ~req:true in
+    Some json
   with _ ->
     None
 
@@ -236,23 +246,25 @@ let bool s = bool_of_string_opt s |> Option.map (fun s -> `Bool s)
 let int s = int_of_string_opt s |> Option.map (fun s -> `Int s)
 let string s = Some (`String s)
 
-let validate : Schema.t -> string -> Jsonpath.t -> Validation.t =
-  fun ({value;_} as schema) str path ->
-  let v conv =
-    match conv str with
-    | None -> `Parsing
-    | Some j ->
-      match Schema.validate j schema with
-      | `Valid -> `Valid
-      | `Invalid a -> `Invalid (List.map (fun (_,s) -> path,s) a)
+let validate : Schema.t -> string -> Jsonpath.t -> bool -> Validation.t =
+  fun ({value;_} as schema) str path req ->
+  let v ?(if_empty=(`Value `Empty)) conv =
+    match str,if_empty with
+    | "",`Value a -> a
+    | str, (`Validate | `Value _) ->
+      match conv str with
+      | None -> `Parsing
+      | Some j ->
+        match Schema.validate j schema with
+        | `Valid -> `Valid
+        | `Invalid a -> `Invalid (List.map (fun (_,s) -> path,s) a)
   in
-  if str = "" then `Empty
-  else match value with
-    | Number _ -> v float
-    | Integer _ -> v int
-    | Boolean -> v bool
-    | String _ -> v string
-    | _ -> Console.log [Jstr.v "cannot validate arrays or objects"]; failwith "error"
+  match value with
+  | Number _ -> v float
+  | Integer _ -> v int
+  | Boolean -> v bool
+  | String _ -> v ~if_empty:(if req then `Validate else `Value `Empty) string
+  | _ -> Console.log [Jstr.v "cannot validate arrays or objects"]; failwith "error"
 
 let add_button el v =
   let el = El.button [el] in
@@ -295,9 +307,9 @@ let regex_input regexes =
       let enable () = El.set_at (Jstr.v "disabled") None but in
       if str = "" then (disable(); None)
       else
-      match List.find_opt (fun (re,_,_) -> Re.execp re str) regexes with
-      | Some (_re,_reg_str,_) -> enable (); Some _reg_str
-      | None -> disable (); None
+        match List.find_opt (fun (re,_,_) -> Re.execp re str) regexes with
+        | Some (_re,_reg_str,_) -> enable (); Some _reg_str
+        | None -> disable (); None
     ) cur
   in
   ignore @@ S.trace (function
@@ -327,12 +339,10 @@ let simple_input ?(disabled=false) schema path value req =
     let el = El.input ~at:(if disabled then At.disabled::at else at) () in
     let target = El.as_target el in
     Ev.listen Ev.focusin (fun _ ->
-        Console.log ["focus in"];
         let cur_str = El.prop El.Prop.value el in
         El.set_at (Jstr.v "style") (Some (Printf.sprintf "width: %dch" (Jstr.length cur_str + 2) |> Jstr.v)) el;
       ) target;
     Ev.listen Ev.focusout (fun _ ->
-        Console.log ["focus out"];
         El.set_at (Jstr.v "style") None el;
       ) target;
     Ev.listen Ev.keyup (fun _ ->
@@ -418,17 +428,17 @@ let view ?(disabled=false) ?(handle_required=true) ?(id="") ?(search=S.const "")
   let (<+>) = Jsonpath.add in
   let set_attr signal to_str attr el =
     S.trace (fun v ->
-      El.set_at (Jstr.v attr) (Some (Jstr.v @@ to_str v)) el
+        El.set_at (Jstr.v attr) (Some (Jstr.v @@ to_str v)) el
       ) signal
     |> ignore
   in
   let set_class signal to_str el = set_attr signal to_str "class" el in
   let list_eq_len l1 l2 = List.length l1 = List.length l2 in
   let (>>=) = S.bind in
-  let rec aux model ({Schema.value;_} as schema) path =
+  let rec aux model ({Schema.value;_} as schema) path req =
     match model, value with
     | Simple s, (Number _ | Integer _ | String _ | Boolean) ->
-      let updated,s,el = simple_input ~disabled schema path s in
+      let updated,s,el = simple_input ~disabled schema path s (handle_required && req) in
       s, E.map (fun s -> `Update (path,s)) updated , [el]
     | Array _ts, Array {items;_} ->
       let add_e,but_el = add_button (El.txt' "+") (`AddItem path) in
@@ -441,7 +451,7 @@ let view ?(disabled=false) ?(handle_required=true) ?(id="") ?(search=S.const "")
         let validss,ac_evs, els =
           List.mapi (fun i t ->
               let path = path <+> `Index i in
-              let a,b,el = aux t items path in
+              let a,b,el = aux t items path false in
               let add_e,but_el = add_button (El.txt' "-") (`RemField path) in
               a,E.select[add_e;b],if disabled then el else but_el::el
             ) vs
@@ -450,7 +460,7 @@ let view ?(disabled=false) ?(handle_required=true) ?(id="") ?(search=S.const "")
         send_e (E.select (add_e::ac_evs));
         let el = List.map El.li els in
         El.set_children parent (if disabled then el else but_el::el);
-        S.merge Validation.merge `Empty validss
+        S.merge Validation.merge (if handle_required && req then `Valid else `Empty) validss
       in
       s, e, [parent]
     | Object _ts, Object ({required;properties}) ->
@@ -472,13 +482,11 @@ let view ?(disabled=false) ?(handle_required=true) ?(id="") ?(search=S.const "")
       let parent = El.div ~at [] in
       let s = S.map ~eq:list_eq_len (prev_if_err (get_obj path) []) model_s >>= fun vs ->
         let validss,_ac_evs, els =
-          List.map (fun (s,t) ->
-              let path = path <+> `Object s in
-              let schema = get_schema properties s in
-              let v,b,e = aux t schema path in
           List.map (fun (name,t) ->
               let path = path <+> `Object name in
               let schema = get_schema properties name in
+              let is_req = List.mem name (Option.value ~default:[] required) in
+              let v,b,e = aux t schema path is_req in
               let err_if_req l =
                 if List.mem name l
                 then S.map (function | `Empty -> `Invalid [path, "required missing"] | a -> a) v
@@ -518,5 +526,5 @@ let view ?(disabled=false) ?(handle_required=true) ?(id="") ?(search=S.const "")
       failwith "error"
   in
   let m = S.value model_s in
-  let a,b,el = aux (v m) (schema m) Jsonpath.empty in
+  let a,b,el = aux (v m) (schema m) Jsonpath.empty true in
   a,b,El.h1 [El.txt' id]::el

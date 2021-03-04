@@ -26,7 +26,7 @@ val schema: t -> Schema.t
 
 val equal: t -> t -> bool
 
-val to_yojson: t -> Yojson.Safe.t option
+val to_yojson: ?handle_required:bool -> t -> Yojson.Safe.t option
 val make: Schema.t -> Yojson.Safe.t -> t
 val update: t -> Jsonpath.t -> string -> t
 val add_field: Jsonpath.t -> string -> t -> t
