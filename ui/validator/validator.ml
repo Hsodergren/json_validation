@@ -317,21 +317,34 @@ let regex_input regexes =
     ) (El.as_target input);
   e,El.div [but;input;regex_txt]
 
-let simple_input ?(disabled=false) schema path value =
-  let at = [At.value (Jstr.v value)] in
-  let el = El.input ~at:(if disabled then At.disabled::at else at) () in
-  let e, send_e = S.create (validate schema value path) in
+let simple_input ?(disabled=false) schema path value req =
+  let e, send_e = S.create (validate schema value path req) in
   let update, send_update = E.create () in
-  let target = El.as_target el in
-  Ev.listen Ev.keyup (fun _ ->
-      let cur_str = El.prop El.Prop.value el in
-      send_e (validate schema (Jstr.to_string cur_str) path);
-    ) target;
-  Ev.listen Ev.change (fun _ ->
-      let cur_str = El.prop El.Prop.value el in
-      send_update (Jstr.to_string cur_str)
-    ) target;
-  update, e, el
+  if disabled
+  then update,e,El.div ~at:[At.class' (Jstr.v "disabled_input")] [El.txt' value]
+  else
+    let at = [At.value (Jstr.v value)] in
+    let el = El.input ~at:(if disabled then At.disabled::at else at) () in
+    let target = El.as_target el in
+    Ev.listen Ev.focusin (fun _ ->
+        Console.log ["focus in"];
+        let cur_str = El.prop El.Prop.value el in
+        El.set_at (Jstr.v "style") (Some (Printf.sprintf "width: %dch" (Jstr.length cur_str + 2) |> Jstr.v)) el;
+      ) target;
+    Ev.listen Ev.focusout (fun _ ->
+        Console.log ["focus out"];
+        El.set_at (Jstr.v "style") None el;
+      ) target;
+    Ev.listen Ev.keyup (fun _ ->
+        let cur_str = El.prop El.Prop.value el in
+        El.set_at (Jstr.v "style") (Some (Printf.sprintf "width: %dch" (Jstr.length cur_str + 2) |> Jstr.v)) el;
+        send_e (validate schema (Jstr.to_string cur_str) path req);
+      ) target;
+    Ev.listen Ev.change (fun _ ->
+        let cur_str = El.prop El.Prop.value el in
+        send_update (Jstr.to_string cur_str)
+      ) target;
+    update, e, el
 
 let schema_to_short {Schema.value;_} =
   match value with
