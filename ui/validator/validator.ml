@@ -363,12 +363,54 @@ let prev_if_err f start =
       !last
     with _ -> !last
 
-let get_description_text {Schema.description;_} =
-  match description with
-  | Some desc ->El.span
-                  ~at:[At.class' (Jstr.v "description")]
-                  [El.txt' desc]
-  | None -> El.span []
+let get_description_text s {Schema.description;enum;value;_} =
+  let ofold o f = Option.fold ~none:(El.div []) ~some:f o in
+  let hdr = El.h1 [El.txt' s] in
+  let enum_el =
+    ofold enum (fun enums ->
+        let strs = List.map Yojson.Safe.to_string enums in
+        let list = El.ul (List.map (fun s -> El.li [El.txt' s]) strs) in
+        El.div [El.h2 [El.txt' "Enum"];list])
+  in
+  let desc_el =
+    ofold description (fun str -> El.div [El.h2 [El.txt' "Description"];El.p [El.txt' str]])
+  in
+  let value_specific =
+    let opt o to_str hdr =
+      ofold o (fun v ->
+          El.div [El.span ~at:[At.class' (Jstr.v "hdr")] [El.txt' (hdr ^ ": ")]; El.txt' (to_str v)])
+    in
+    let hdr, el_opt =
+      match value with
+      | Number {max;min} ->
+        "Number", El.div [opt max string_of_float "max";opt min string_of_float "min"]
+      | Integer {max;min} ->
+        "Integer", El.div [opt max string_of_float "max";opt min string_of_float "min"]
+      | String {str_max_length;str_min_length} ->
+        "String", El.div [opt str_max_length string_of_int "max length";
+                          opt str_min_length string_of_int "min length"]
+      | Boolean ->
+        "Bool", El.div []
+      | Array {arr_max_length;arr_min_length;_} ->
+        "Array", El.div [opt arr_max_length string_of_int "max length";
+                         opt arr_min_length string_of_int "min length"]
+      | Object {required;properties} ->
+        let required_el = ofold required (fun reqs ->
+            El.div [El.h2 [El.txt' "Required"];El.ul (List.map (fun req -> El.li [El.txt' req]) reqs)]
+          )
+        in
+        let regexp_el = match properties with
+          | Props _ -> El.div []
+          | PatProps [(_,pat,_)] -> El.div [El.h2 [El.txt' "Pattern"]; El.txt' pat]
+          | PatProps pats ->
+            El.div [El.h2 [El.txt' "Patterns"];
+                    El.ul (List.map (fun (_,pat,_) -> El.li [El.txt' pat]) pats)]
+        in
+        "Object", El.div [required_el;regexp_el]
+    in
+    El.div [El.h2 [El.txt' ("type: " ^ hdr)]; el_opt]
+  in
+  El.div ~at:[At.class' (Jstr.v "description")] [hdr;desc_el;enum_el;value_specific]
 
 let view ?(disabled=false) ?(handle_required=true) ?(id="") ?(search=S.const "") model_s =
   let search_re = S.map (fun str -> Re.Posix.re str |> Re.compile) search in
@@ -434,8 +476,11 @@ let view ?(disabled=false) ?(handle_required=true) ?(id="") ?(search=S.const "")
               let path = path <+> `Object s in
               let schema = get_schema properties s in
               let v,b,e = aux t schema path in
+          List.map (fun (name,t) ->
+              let path = path <+> `Object name in
+              let schema = get_schema properties name in
               let err_if_req l =
-                if List.mem s l
+                if List.mem name l
                 then S.map (function | `Empty -> `Invalid [path, "required missing"] | a -> a) v
                 else v
               in
@@ -444,9 +489,9 @@ let view ?(disabled=false) ?(handle_required=true) ?(id="") ?(search=S.const "")
                 then Option.fold required ~none:v ~some:err_if_req
                 else v
               in
-              let s = Printf.sprintf "%s (%s)" s (schema_to_short schema) in
+              let s = Printf.sprintf "%s (%s)" name (schema_to_short schema) in
               let rem_e,rem_el = add_button (El.txt' "-") (`RemField path) in
-              let desc = get_description_text schema in
+              let desc = get_description_text name schema in
               let hdr = El.h4 (if is_patprops && not disabled
                                then [El.txt' s;rem_el;desc]
                                else [El.txt' s;desc])
