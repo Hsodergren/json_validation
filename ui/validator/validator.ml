@@ -323,7 +323,7 @@ let simple_input ?(disabled=false) schema path value =
       let cur_str = El.prop El.Prop.value el in
       send_e (validate schema (Jstr.to_string cur_str) path);
     ) target;
-  Ev.listen Ev.keyup (fun _ ->
+  Ev.listen Ev.change (fun _ ->
       let cur_str = El.prop El.Prop.value el in
       send_update (Jstr.to_string cur_str)
     ) target;
