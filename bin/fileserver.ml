@@ -57,7 +57,7 @@ module T : Vserver.S_Type with type cfg = string = struct
   let get_module t m =
     Option.map (fun {name=_;schema;files} ->
         Types.Module.v
-          (Yojson.Safe.from_file schema)
+          (yml_to_yojson schema)
           (List.map (fun (s,f) -> s,yml_to_yojson f) files))
       (find t m)
 
