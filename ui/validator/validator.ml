@@ -519,7 +519,7 @@ let view ?(disabled=false) ?(handle_required=true) ?(id="") ?(search=S.const "")
         El.set_children parent
           (if is_patprops && not disabled then but_el::els else els);
         _send_e (E.select (add_e::_ac_evs));
-        S.merge Validation.merge `Valid validss
+        S.merge Validation.merge `Empty validss
       in
       s,e,[parent]
     | a,b ->
