@@ -373,7 +373,7 @@ let prev_if_err f start =
       !last
     with _ -> !last
 
-let get_description_text s {Schema.description;enum;value;_} =
+let rec get_description_text s {Schema.description;enum;value;_} =
   let ofold o f = Option.fold ~none:(El.div []) ~some:f o in
   let hdr = El.h1 [El.txt' s] in
   let enum_el =
@@ -401,9 +401,10 @@ let get_description_text s {Schema.description;enum;value;_} =
                           opt str_min_length string_of_int "min length"]
       | Boolean ->
         "Bool", El.div []
-      | Array {arr_max_length;arr_min_length;_} ->
+      | Array {arr_max_length;arr_min_length;items} ->
         "Array", El.div [opt arr_max_length string_of_int "max length";
-                         opt arr_min_length string_of_int "min length"]
+                         opt arr_min_length string_of_int "min length";
+                         get_description_text "Items" items]
       | Object {required;properties} ->
         let required_el = ofold required (fun reqs ->
             El.div [El.h2 [El.txt' "Required"];El.ul (List.map (fun req -> El.li [El.txt' req]) reqs)]
@@ -420,7 +421,7 @@ let get_description_text s {Schema.description;enum;value;_} =
     in
     El.div [El.h2 [El.txt' ("type: " ^ hdr)]; el_opt]
   in
-  El.div ~at:[At.class' (Jstr.v "description")] [hdr;desc_el;enum_el;value_specific]
+  El.div [hdr;desc_el;enum_el;value_specific]
 
 let view ?(disabled=false) ?(handle_required=true) ?(id="") ?(search=S.const "") model_s =
   let search_re = S.map (fun str -> Re.Posix.re str |> Re.compile) search in
@@ -500,6 +501,7 @@ let view ?(disabled=false) ?(handle_required=true) ?(id="") ?(search=S.const "")
               let s = Printf.sprintf "%s (%s)" name (schema_to_short schema) in
               let rem_e,rem_el = add_button (El.txt' "-") (`RemField path) in
               let desc = get_description_text name schema in
+              El.set_class (Jstr.v "description") true desc;
               let hdr = El.h4 (if is_patprops && not disabled
                                then [El.txt' s;rem_el;desc]
                                else [El.txt' s;desc])
