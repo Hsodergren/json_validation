@@ -8,16 +8,12 @@ let j2y_cmd = "python3 -c 'import sys, yaml, json; y=json.loads(sys.stdin.read()
 
 let input_read_all inc =
   let data = Buffer.create 0 in
-  try
-    while true do
-      Buffer.add_char data (input_char inc)
-    done;
-    failwith "impossible!!!"
-  with
-    End_of_file ->
-    close_in inc;
-    Buffer.to_bytes data
-    |> Bytes.to_string
+  let rec aux () =
+    match input_char inc with
+    | c -> Buffer.add_char data c; aux ()
+    | exception End_of_file -> Buffer.to_bytes data |> Bytes.to_string
+  in
+  aux ()
 
 let yml_to_yojson file =
   let inc = Unix.open_process_in @@ y2j_cmd file in
