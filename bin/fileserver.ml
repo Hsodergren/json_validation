@@ -25,7 +25,6 @@ let yojson_to_yml json =
   input_read_all inc
 
 module T = struct
-  type cfg = string
   type data = {
     name: string;
     schema: string;
@@ -58,16 +57,16 @@ module T = struct
 
   let save t {Types.Module.jsons;_} name =
     (match List.find_opt (fun {name=n;_} -> n = name) t with
-    | Some {files;_} -> List.iter (fun (name,file) ->
-        match List.assoc_opt name jsons with
-          | Some json ->
-            let yml = yojson_to_yml json in
-            let outc = open_out file in
-            output_string outc yml;
-            close_out outc
-        | None -> ()
-      ) files
-    | None -> print_endline "not found");
+     | Some {files;_} -> List.iter (fun (name,file) ->
+         match List.assoc_opt name jsons with
+         | Some json ->
+           let yml = yojson_to_yml json in
+           let outc = open_out file in
+           output_string outc yml;
+           close_out outc
+         | None -> ()
+       ) files
+     | None -> print_endline "not found");
     t
 end
 module Serv = Vserver.Make(T)

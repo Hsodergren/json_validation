@@ -44,10 +44,21 @@ module Make (T: S_Type) : S with type t := T.t = struct
       | `Root -> Server.respond_redirect ~uri:(Uri.of_string "/file/index/index.html") ()
       | `Module m -> begin
           match T.get_module !t m with
-        | Some m -> ok ~body:(Yojson.Safe.to_string (Types.Module.to_yojson m))
-        | None -> Server.respond_not_found ()
+          | Some m ->
+            let body =
+              Types.Module.to_yojson m
+              |> Yojson.Safe.to_string
+            in
+            ok ~body
+          | None -> Server.respond_not_found ()
         end
-      | `ModuleList -> ok ~body:(Yojson.Safe.to_string (Types.ModuleList.to_yojson (T.get_module_list !t)))
+      | `ModuleList ->
+        let body =
+          T.get_module_list !t
+          |> Types.ModuleList.to_yojson
+          |> Yojson.Safe.to_string
+        in
+        ok ~body
       | `File (dir,fname) ->
         let fname = Server.resolve_local_file
             ~docroot:(Fpath.to_string root)
