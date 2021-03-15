@@ -11,7 +11,7 @@ end
 module type S = sig
   type t
 
-  val start: ?port:int -> t -> Fpath.t -> unit Lwt.t
+  val start: ?port:int -> t -> string -> unit Lwt.t
 end
 
 module Make (T: S_Type) : S with type t := T.t = struct
@@ -61,7 +61,7 @@ module Make (T: S_Type) : S with type t := T.t = struct
         ok ~body
       | `File (dir,fname) ->
         let fname = Server.resolve_local_file
-            ~docroot:(Fpath.to_string root)
+            ~docroot:root
             ~uri:(Uri.of_string (dir ^"/"^fname))
         in
         Server.respond_file ~fname ()

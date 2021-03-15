@@ -72,7 +72,7 @@ end
 module Serv = Vserver.Make(T)
 
 let run port conf ui =
-  ignore (Lwt_main.run (Serv.start ~port (T.make conf) (Fpath.v ui)))
+  ignore (Lwt_main.run (Serv.start ~port (T.make conf) ui))
 
 open Cmdliner
 

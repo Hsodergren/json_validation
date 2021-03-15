@@ -1,11 +1,11 @@
 (executable
  (name server)
  (modules server)
- (libraries yojson types vserver fpath)
+ (libraries yojson types vserver)
  (preprocess (pps ppx_deriving_yojson)))
 
 (executable
  (name fileserver)
  (modules fileserver)
- (libraries yojson types vserver fpath cmdliner)
+ (libraries yojson types vserver cmdliner)
  (preprocess (pps ppx_deriving_yojson)))

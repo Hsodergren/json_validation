@@ -69,4 +69,4 @@ module T = struct
 end
 module Serv = Vserver.Make(T)
 
-let () = ignore (Lwt_main.run (Serv.start (T.make ()) (Fpath.v asdpath)))
+let () = ignore (Lwt_main.run (Serv.start (T.make ()) asdpath))
