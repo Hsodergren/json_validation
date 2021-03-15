@@ -83,11 +83,11 @@ let port =
 
 let conf =
   let doc = "Path to the config file" in
-  Arg.(required & pos 0 (some string) None & info [] ~doc ~docv:"CONF")
+  Arg.(required & pos 0 (some non_dir_file) None & info [] ~doc ~docv:"CONF")
 
 let ui =
   let doc = "Path to the ui directory" in
-  Arg.(required & pos 1 (some string) None & info [] ~doc ~docv:"UI")
+  Arg.(required & pos 1 (some dir) None & info [] ~doc ~docv:"UI")
 
 let run_t = Term.(const run $ port $ conf $ ui)
 
