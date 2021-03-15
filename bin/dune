@@ -7,5 +7,5 @@
 (executable
  (name fileserver)
  (modules fileserver)
- (libraries yojson types vserver fpath)
+ (libraries yojson types vserver fpath cmdliner)
  (preprocess (pps ppx_deriving_yojson)))

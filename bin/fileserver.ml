@@ -1,6 +1,3 @@
-let asdpath = Sys.argv.(1)
-let conf_path = Sys.argv.(2)
-
 let y2j_cmd f =
   Printf.sprintf {|python3 -c 'import sys, yaml, json; y=yaml.safe_load(open("%s")); print(json.dumps(y))'|} f
 
@@ -75,4 +72,27 @@ module T = struct
 end
 module Serv = Vserver.Make(T)
 
-let () = ignore (Lwt_main.run (Serv.start (T.make conf_path) (Fpath.v asdpath)))
+let run port conf ui =
+  ignore (Lwt_main.run (Serv.start ~port (T.make conf) (Fpath.v ui)))
+
+open Cmdliner
+
+let port =
+  let doc = "The port to use for the server" in
+  Arg.(value & opt int 8080 & info ["p";"port"] ~doc)
+
+let conf =
+  let doc = "Path to the config file" in
+  Arg.(required & pos 0 (some string) None & info [] ~doc ~docv:"CONF")
+
+let ui =
+  let doc = "Path to the ui directory" in
+  Arg.(required & pos 1 (some string) None & info [] ~doc ~docv:"UI")
+
+let run_t = Term.(const run $ port $ conf $ ui)
+
+let info =
+  let doc = "Server that hosts file based yml editor" in
+  Term.info "fileserver" ~doc ~exits:Term.default_error_exits
+
+let () = Term.exit @@ Term.eval (run_t,info)

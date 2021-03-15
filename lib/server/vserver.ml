@@ -11,7 +11,7 @@ end
 module type S = sig
   type t
 
-  val start: t -> Fpath.t -> unit Lwt.t
+  val start: ?port:int -> t -> Fpath.t -> unit Lwt.t
 end
 
 module Make (T: S_Type) : S with type t := T.t = struct
@@ -32,7 +32,7 @@ module Make (T: S_Type) : S with type t := T.t = struct
   let ok ~body =
     Server.respond_string ~status:`OK ~body ()
 
-  let start t root =
+  let start ?(port=8080) t root =
     let t = ref t in
     let all = Routes.one_of [index; modul; modul_list; file; save] in
 
@@ -61,5 +61,5 @@ module Make (T: S_Type) : S with type t := T.t = struct
         | Ok m -> t := T.save !t m mname; ok ~body:""
         | Error str -> Server.respond_error ~status:`Bad_request ~body:str ()
     in
-    Server.create ~mode:(`TCP (`Port 8080)) (Server.make ~callback ())
+    Server.create ~mode:(`TCP (`Port port)) (Server.make ~callback ())
 end
