@@ -7,7 +7,7 @@ end = struct
   type t = string list [@@deriving yojson]
 
   let to_list t = t
-  let of_list t = t
+  let of_list t = List.sort String.compare t
 end
 
 module Module = struct
