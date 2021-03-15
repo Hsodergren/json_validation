@@ -112,7 +112,7 @@ let save name models schema =
   else Fut.return @@ Error (Jv.Error.v (Jstr.v "error saving module"))
 
 let body name schemajson jsons sb_s save_enable c =
-  match Schema.of_yojson schemajson with
+  match Schema.of_yojson ~assume_object:true schemajson with
   | Error str -> El.txt' ("schema load error : " ^ str)
   | Ok schema ->
     let models,_vs,uis =
