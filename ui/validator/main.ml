@@ -112,39 +112,41 @@ let save name models schema =
   else Fut.return @@ Error (Jv.Error.v (Jstr.v "error saving module"))
 
 let body name schemajson jsons sb_s save_enable c =
-  let schema = Schema.of_yojson schemajson |> Result.get_ok in
-  let models,_vs,uis =
-    List.mapi (fun i (name,j) -> name,Model.make schema j,i=0) jsons
-    |> List.map (fun (id,m,b) -> validator ~handle_required:b ~search:sb_s ~id m)
-    |> Util.unzip3
-  in
-  let result_ui = create_result models ~search:sb_s in
-  let validators = List.map (fun el ->
-      El.div ~at:[At.class' (Jstr.v "validator")] el
-    ) uis
-  in
-  let _ = S.trace
-      save_enable
-      (S.merge (fun b v -> b && match v with | `Valid | `Empty -> true | _ -> false) true _vs)
-  in
-  let _ = E.trace (fun _ ->
-      let models = zip (List.map fst jsons) (List.map S.value models) in
-      match models with
-      | [] -> Console.error ["no models to save"]
-      | _::_ ->
-        Console.log["saving"];
-        save_enable false;
-        let save_fut = save name models schemajson in
-        Fut.await save_fut (function
-            | Ok () -> Console.log["saving done"];
-            | Error err -> Console.log [Jv.Error.message err]
-          );
-        save_enable true
-    ) c
-  in
-  let validators = El.div ~at:[At.class' (Jstr.v "validators")] validators in
-  let result_ui = El.div ~at:[At.class' (Jstr.v "result")] [result_ui] in
-  El.div ~at:[At.class' (Jstr.v "content")] [result_ui;validators]
+  match Schema.of_yojson schemajson with
+  | Error str -> El.txt' ("schema load error : " ^ str)
+  | Ok schema ->
+    let models,_vs,uis =
+      List.mapi (fun i (name,j) -> name,Model.make schema j,i=0) jsons
+      |> List.map (fun (id,m,b) -> validator ~handle_required:b ~search:sb_s ~id m)
+      |> Util.unzip3
+    in
+    let result_ui = create_result models ~search:sb_s in
+    let validators = List.map (fun el ->
+        El.div ~at:[At.class' (Jstr.v "validator")] el
+      ) uis
+    in
+    let _ = S.trace
+        save_enable
+        (S.merge (fun b v -> b && match v with | `Valid | `Empty -> true | _ -> false) true _vs)
+    in
+    let _ = E.trace (fun _ ->
+        let models = zip (List.map fst jsons) (List.map S.value models) in
+        match models with
+        | [] -> Console.error ["no models to save"]
+        | _::_ ->
+          Console.log["saving"];
+          save_enable false;
+          let save_fut = save name models schemajson in
+          Fut.await save_fut (function
+              | Ok () -> Console.log["saving done"];
+              | Error err -> Console.log [Jv.Error.message err]
+            );
+          save_enable true
+      ) c
+    in
+    let validators = El.div ~at:[At.class' (Jstr.v "validators")] validators in
+    let result_ui = El.div ~at:[At.class' (Jstr.v "result")] [result_ui] in
+    El.div ~at:[At.class' (Jstr.v "content")] [result_ui;validators]
 
 let main_ui name schema jsons =
   let c, save_enable, sb_s, header_el = header () in

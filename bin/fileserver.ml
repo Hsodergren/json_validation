@@ -27,7 +27,7 @@ let yojson_to_yml json =
   close_out outc;
   input_read_all inc
 
-module T : Vserver.S_Type with type cfg = string = struct
+module T = struct
   type cfg = string
   type data = {
     name: string;
@@ -75,4 +75,4 @@ module T : Vserver.S_Type with type cfg = string = struct
 end
 module Serv = Vserver.Make(T)
 
-let () = ignore (Lwt_main.run (Serv.start conf_path (Fpath.v asdpath)))
+let () = ignore (Lwt_main.run (Serv.start (T.make conf_path) (Fpath.v asdpath)))

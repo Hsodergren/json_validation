@@ -1,6 +1,6 @@
 let asdpath = Sys.argv.(1)
 
-module T : Vserver.S_Type with type cfg = unit = struct
+module T = struct
   let schema = {|
 {
   "type": "object",
@@ -69,4 +69,4 @@ module T : Vserver.S_Type with type cfg = unit = struct
 end
 module Serv = Vserver.Make(T)
 
-let () = ignore (Lwt_main.run (Serv.start () (Fpath.v asdpath)))
+let () = ignore (Lwt_main.run (Serv.start (T.make ()) (Fpath.v asdpath)))

@@ -2,8 +2,6 @@ open Cohttp_lwt_unix
 
 module type S_Type = sig
   type t
-  type cfg
-  val make: cfg -> t
 
   val get_module: t -> string -> Types.Module.t option
   val get_module_list: t -> Types.ModuleList.t
@@ -11,12 +9,12 @@ module type S_Type = sig
 end
 
 module type S = sig
-  type cfg
+  type t
 
-  val start: cfg -> Fpath.t -> unit Lwt.t
+  val start: t -> Fpath.t -> unit Lwt.t
 end
 
-module Make (T: S_Type) : S with type cfg := T.cfg = struct
+module Make (T: S_Type) : S with type t := T.t = struct
 
   let index = Routes.(empty @--> `Root)
   let modul = Routes.(s "module" / str /? nil @--> fun m -> `Module (m))
@@ -34,8 +32,8 @@ module Make (T: S_Type) : S with type cfg := T.cfg = struct
   let ok ~body =
     Server.respond_string ~status:`OK ~body ()
 
-  let start cfg root =
-    let t = ref @@ T.make cfg in
+  let start t root =
+    let t = ref t in
     let all = Routes.one_of [index; modul; modul_list; file; save] in
 
     let (let*) = Lwt.bind in

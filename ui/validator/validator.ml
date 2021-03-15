@@ -383,7 +383,7 @@ let rec get_description_text s {Schema.description;enum;value;_} =
         El.div [El.h2 [El.txt' "Enum"];list])
   in
   let desc_el =
-    ofold description (fun str -> El.div [El.h2 [El.txt' "Description"];El.p [El.txt' str]])
+    ofold description (fun str -> El.div [El.p [El.txt' str]])
   in
   let value_specific =
     let opt o to_str hdr =
@@ -407,8 +407,7 @@ let rec get_description_text s {Schema.description;enum;value;_} =
                          get_description_text "Items" items]
       | Object {required;properties} ->
         let required_el = ofold required (fun reqs ->
-            El.div [El.h2 [El.txt' "Required"];El.ul (List.map (fun req -> El.li [El.txt' req]) reqs)]
-          )
+            El.div [El.h2 [El.txt' "Required"];El.ul (List.map (fun req -> El.li [El.txt' req]) reqs)])
         in
         let regexp_el = match properties with
           | Props _ -> El.div []
@@ -479,8 +478,7 @@ let view ?(disabled=false) ?(handle_required=true) ?(id="") ?(search=S.const "")
       let add_e = E.map (fun str -> `AddField (path,str)) but_e in
       let ee, _send_e = E.create () in
       let e = E.switch add_e ee in
-      let at = [At.class' (Jstr.v "object")] in
-      let parent = El.div ~at [] in
+      let parent = El.div ~at:[At.class' (Jstr.v "object")] [] in
       let s = S.map ~eq:list_eq_len (prev_if_err (get_obj path) []) model_s >>= fun vs ->
         let validss,_ac_evs, els =
           List.map (fun (name,t) ->
